@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
+#Loading libraries
 library(tidyverse)
 library(ggplot2)
 #install.packages("groupdata2")
@@ -16,6 +17,195 @@ library(groupdata2)
 #install.packages("janitor")
 library(janitor)
 ```
+
+
+```{r PREPROC-FUNCTION}
+
+#Loading all files to a list
+list <- list.files(path = "./datatest", pattern = ".csv", all.files = FALSE, full.names = TRUE)
+  
+#The function
+preproc_function <- function(filename) {
+  #load data
+  data1 <- read_csv(file = filename)
+    
+  #Removing empty columns
+  data2 <- data1 %>% remove_empty("cols") 
+  data2 <- filter(data2, participant._index_in_pages>2)
+  
+    #Splitting into task-specific df's
+  dfsurvey <- data1 %>% select(matches("survey"))
+
+  dfmatrix <- data1 %>% select(matches("matrix"))
+
+  dfprisoner <- data1 %>% select(matches("prison"))
+
+  dfpaticipant <- data1 %>% select(matches("participant"))
+
+  dfsession <- data1 %>% select(matches("session"))
+  
+  
+  
+  #################SURVEY#####################
+  
+  #Changing the long names 
+  names(dfsurvey) = gsub(pattern = "survey_followup.1.player.", replacement = "", x = names(dfsurvey))
+  
+  #Change from wide to long format, around the "q" aka the questions. Data in every other coloumn is repeated
+  dfsurvey <- pivot_longer(dfsurvey, cols= starts_with("q"))
+  
+  dfsurvey$id_in_group <- as.factor(dfsurvey$id_in_group)
+  
+  
+  #Creating GES_score
+  dfsurvey <- dfsurvey %>% 
+    #For some reason it only works when the below is done on its own...
+    #id_in_group <- as.factor(dfsurvey$id_in_group) %>% 
+    group_by(id_in_group) %>% 
+    subset(age !="NA") %>% 
+    rename(question = name) %>% 
+    mutate(
+      #Deleting columns
+      role = NULL,
+      payoff = NULL,
+      survey_followup.1.group.id_in_subsession = NULL,
+      survey_followup.1.subsession.round_number = NULL,
+      GES_score = sum(value/25),
+      round = gsub("[q]", "" , question, perl=TRUE),
+      round = as.numeric(round),
+      )
+  
+  
+  
+    #################PRISONER#####################
+  
+  #Deleting useless coloums 
+  dfprisoner <- subset(dfprisoner, select = !grepl("*group.id_in_subsession", names(dfprisoner)))
+  
+  #Firstly put everything in the same variable, then separate them. 
+  dfprisoner <- dfprisoner %>% 
+    mutate_all(as.character) %>% 
+    pivot_longer(cols = everything(), names_prefix = "prisoner.", names_to = "variables") %>% 
+    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
+    #deleting useless columns
+    subset(player=="player") %>%
+    #Splitting the variable-column in three
+    mutate(
+      id_in_group = ifelse(variable =="id_in_group", value, ""),
+      decision = ifelse(variable =="decision", value, ""),
+      payoff = ifelse(variable =="payoff", value, ""),
+      #Deleting columns
+      value = NULL,
+      variable= NULL,
+      player=NULL,
+      #Rearranging values, so the data is in the same rows
+      payoff=lead(payoff,2),
+      decision= lead(decision,3),
+      round = as.numeric(round)
+      ) %>%
+    #Deleting rows without data
+    filter(
+      decision!=""
+     )
+  
+  
+  #################MATRIX#####################
+
+  
+  #Firstly put everything in the same variable, then separate them.
+  dfmatrix <- dfmatrix %>%
+    mutate_all(as.character) %>%
+    pivot_longer(cols = everything(), names_prefix = "matrix_task.", names_to = "variables") %>%
+    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
+    #deleting useless columns
+    subset(player=="player") %>%
+    subset(value !="NA") %>%
+    #Splitting the variable-column in three
+    mutate(
+      id_in_group = ifelse(variable =="id_in_group", value, ""),
+      matrix = ifelse(variable =="matrix", value, ""),
+      correct_answer = ifelse(variable =="correct_answer", value, ""),
+      answer = ifelse(variable =="answer1", value, ""),
+      completed = ifelse(variable =="completed1", value, ""),
+      success = ifelse(variable =="success1", value, ""),
+      time = ifelse(variable =="time1", value, ""),
+      payoff = ifelse(variable =="payoff", value, ""),
+
+      #Deleting columns
+      value = NULL,
+      variable= NULL,
+      player=NULL,
+      payoff=NULL,
+      #Rearranging values, so the data is in the same rows
+      matrix = lead(matrix,2),
+      correct_answer = lead(correct_answer,3),
+      answer=lead(answer,4),
+      completed=lead(completed,5),
+      success=lead(success,6),
+      time=lead(time,7),
+      ) %>%
+    #Deleting rows without data
+    filter(
+      id_in_group!="",
+      matrix!="[]")
+
+    dfmatrix$id_in_group <- as.factor(dfmatrix$id_in_group)
+    dfmatrix$success <- as.integer(dfmatrix$success)
+    dfmatrix$completed <- as.integer(dfmatrix$completed)
+
+    dfmatrix <- dfmatrix %>%
+      #For some reason it only works when the below is done on its own...
+      #id_in_group <- as.factor(dfmatrix$id_in_group) %>%
+      group_by(id_in_group) %>%
+      mutate(
+        total_success = sum(success),
+        total_completed = sum(completed), 
+        #Creates variable which contains the time spent on each matrix. 
+        #NB The last matrix is NA, however it will not be completed either. 
+        time1 = strptime(time, "%H:%M:%S"),
+        time_spent = lead(time1)-time1,
+        time1=NULL,
+        time_spent = gsub("[secs]", "" , time_spent, perl=TRUE), 
+        time_spent = as.numeric(time_spent),
+        payoff=NULL,
+        round = as.numeric(round)
+        )
+    
+    #Merging
+    dfmerged<- merge(dfsurvey, dfmatrix, by = c("id_in_group","round"), all = TRUE)
+    dfmerged1 <-  merge(dfmerged, dfprisoner, by = c("id_in_group","round"), all = TRUE)
+
+    dfmerged2 <- dfmerged1 %>% 
+      group_by(id_in_group) %>% 
+      mutate(
+        age = age[1],
+        gender = gender[1],
+        language = language [1], 
+        parent = parent[1],
+        experience = experience [1], 
+        regular_contact=regular_contact[1],
+        dyad_name = dyad_name[1],
+        position =position[1],
+        GES_score=GES_score[1],
+        )
+  
+      return(dfmerged2)
+}
+
+
+
+try <- preproc_function("Data/all_apps_wide_2021-10-22.csv")
+
+
+#Using the function on the entire list 
+df = list %>%
+    purrr::map_df(preproc_function)
+
+#writing a csv of the dataframe 
+write.csv(try,'DF_BA_test.csv')
+
+```
+
 
 
 
@@ -223,214 +413,6 @@ dfmerged2 <- dfmerged1 %>%
 
 
 
-
-```{r PREPROC-FUNCTION}
-
-#Loading all files to a list
-list <- list.files(path = "./datatest", pattern = ".csv", all.files = FALSE, full.names = TRUE)
-  
-#The function
-preproc_function <- function(filename) {
-  #load data
-  data1 <- read_csv(file = filename)
-    
-  #Removing empty columns
-  data2 <- data1 %>% remove_empty("cols") 
-  data2 <- filter(data2, participant._index_in_pages>2)
-  
-    #Splitting into task-specific df's
-  dfsurvey <- data1 %>% select(matches("survey"))
-
-  dfmatrix <- data1 %>% select(matches("matrix"))
-
-  dfprisoner <- data1 %>% select(matches("prison"))
-
-  dfpaticipant <- data1 %>% select(matches("participant"))
-
-  dfsession <- data1 %>% select(matches("session"))
-  
-  
-  
-  #################SURVEY#####################
-  
-  #Changing the long names 
-  names(dfsurvey) = gsub(pattern = "survey_followup.1.player.", replacement = "", x = names(dfsurvey))
-  
-  #Change from wide to long format, around the "q" aka the questions. Data in every other coloumn is repeated
-  dfsurvey <- pivot_longer(dfsurvey, cols= starts_with("q"))
-  
-  dfsurvey$id_in_group <- as.factor(dfsurvey$id_in_group)
-  
-  
-  #Creating GES_score
-  dfsurvey <- dfsurvey %>% 
-    #For some reason it only works when the below is done on its own...
-    #id_in_group <- as.factor(dfsurvey$id_in_group) %>% 
-    group_by(id_in_group) %>% 
-    subset(age !="NA") %>% 
-    rename(question = name) %>% 
-    mutate(
-      #Deleting columns
-      role = NULL,
-      payoff = NULL,
-      survey_followup.1.group.id_in_subsession = NULL,
-      survey_followup.1.subsession.round_number = NULL,
-      GES_score = sum(value/25),
-      round = gsub("[q]", "" , question, perl=TRUE),
-      round = as.numeric(round),
-      )
-  
-  
-  
-    #################PRISONER#####################
-  
-  #Deleting useless coloums 
-  dfprisoner <- subset(dfprisoner, select = !grepl("*group.id_in_subsession", names(dfprisoner)))
-  
-  #Firstly put everything in the same variable, then separate them. 
-  dfprisoner <- dfprisoner %>% 
-    mutate_all(as.character) %>% 
-    pivot_longer(cols = everything(), names_prefix = "prisoner.", names_to = "variables") %>% 
-    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
-    #deleting useless columns
-    subset(player=="player") %>%
-    #Splitting the variable-column in three
-    mutate(
-      id_in_group = ifelse(variable =="id_in_group", value, ""),
-      decision = ifelse(variable =="decision", value, ""),
-      payoff = ifelse(variable =="payoff", value, ""),
-      #Deleting columns
-      value = NULL,
-      variable= NULL,
-      player=NULL,
-      #Rearranging values, so the data is in the same rows
-      payoff=lead(payoff,2),
-      decision= lead(decision,3),
-      round = as.numeric(round)
-      ) %>%
-    #Deleting rows without data
-    filter(
-      decision!=""
-     )
-  
-  
-  #################MATRIX#####################
-
-  
-  #Firstly put everything in the same variable, then separate them.
-  dfmatrix <- dfmatrix %>%
-    mutate_all(as.character) %>%
-    pivot_longer(cols = everything(), names_prefix = "matrix_task.", names_to = "variables") %>%
-    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
-    #deleting useless columns
-    subset(player=="player") %>%
-    subset(value !="NA") %>%
-    #Splitting the variable-column in three
-    mutate(
-      id_in_group = ifelse(variable =="id_in_group", value, ""),
-      matrix = ifelse(variable =="matrix", value, ""),
-      correct_answer = ifelse(variable =="correct_answer", value, ""),
-      answer = ifelse(variable =="answer1", value, ""),
-      completed = ifelse(variable =="completed1", value, ""),
-      success = ifelse(variable =="success1", value, ""),
-      time = ifelse(variable =="time1", value, ""),
-      payoff = ifelse(variable =="payoff", value, ""),
-
-      #Deleting columns
-      value = NULL,
-      variable= NULL,
-      player=NULL,
-      payoff=NULL,
-      #Rearranging values, so the data is in the same rows
-      matrix = lead(matrix,2),
-      correct_answer = lead(correct_answer,3),
-      answer=lead(answer,4),
-      completed=lead(completed,5),
-      success=lead(success,6),
-      time=lead(time,7),
-      ) %>%
-    #Deleting rows without data
-    filter(
-      id_in_group!="",
-      matrix!="[]")
-
-    dfmatrix$id_in_group <- as.factor(dfmatrix$id_in_group)
-    dfmatrix$success <- as.integer(dfmatrix$success)
-    dfmatrix$completed <- as.integer(dfmatrix$completed)
-
-    dfmatrix <- dfmatrix %>%
-      #For some reason it only works when the below is done on its own...
-      #id_in_group <- as.factor(dfmatrix$id_in_group) %>%
-      group_by(id_in_group) %>%
-      mutate(
-        total_success = sum(success),
-        total_completed = sum(completed), 
-        #Creates variable which contains the time spent on each matrix. 
-        #NB The last matrix is NA, however it will not be completed either. 
-        time1 = strptime(time, "%H:%M:%S"),
-        time_spent = lead(time1)-time1,
-        time1=NULL,
-        time_spent = gsub("[secs]", "" , time_spent, perl=TRUE), 
-        time_spent = as.numeric(time_spent),
-        payoff=NULL,
-        round = as.numeric(round)
-        )
-    
-    #Merging
-    dfmerged<- merge(dfsurvey, dfmatrix, by = c("id_in_group","round"), all = TRUE)
-    dfmerged1 <-  merge(dfmerged, dfprisoner, by = c("id_in_group","round"), all = TRUE)
-
-    dfmerged2 <- dfmerged1 %>% 
-      group_by(id_in_group) %>% 
-      mutate(
-        age = age[1],
-        gender = gender[1],
-        language = language [1], 
-        parent = parent[1],
-        experience = experience [1], 
-        regular_contact=regular_contact[1],
-        dyad_name = dyad_name[1],
-        position =position[1],
-        GES_score=GES_score[1],
-        )
-  
-      return(dfmerged2)
-}
-
-
-
-try <- preproc_function("Data/all_apps_wide_2021-10-22.csv")
-
-
-#Using the function on the entire list 
-df = list %>%
-    purrr::map_df(preproc_function)
-
-#writing a csv of the dataframe 
-write.csv(try,'DF_BA_test.csv')
-
-```
-
-
-```{r PLOTTING}
-# Plotting data:
-df %>% 
-  ggplot() +
-  aes(x=id_in_group, y=time_spent) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  theme_classic()
-
-
-
-ggplot(data=df, aes(x=time_spent)) + 
-      geom_bar(aes(y = ..prop.., fill = success), position = "dodge")+
-  facet_wrap(.~id_in_group)+
-  theme_linedraw()
-
-
-
-```
 
 
 
