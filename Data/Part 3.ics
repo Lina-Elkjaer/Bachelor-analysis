@@ -1,0 +1,84 @@
+BEGIN:VCALENDAR
+METHOD:REQUEST
+PRODID:Microsoft Exchange Server 2010
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Central Europe Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T030000
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=10
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T020000
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+RRULE:FREQ=YEARLY;INTERVAL=1;BYDAY=-1SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Christine Parsons:mailto:christine.parsons@cas.au.dk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Arnault-Qu
+ entin Vermillet:mailto:arnault@clin.au.dk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Lina Elkj
+ ær Pedersen:mailto:201905535@post.au.dk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Anja Feibe
+ l Meerwald:mailto:202008898@post.au.dk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Sara Koldi
+ ng:mailto:sarakolding@live.dk
+DESCRIPTION;LANGUAGE=en-US:https://aarhusuniversity.zoom.us/my/ceparsons\n\
+ nDear all\,\n\nLooks like we found a time that suits. My office is in Inte
+ racting Minds Center\, Jens Chr. Skous Vej 4\, Building 1483\, 3rd floor\n
+ There is a door bell you’ll need to ring to come in.\nIf it doesn’t su
+ it to come there\, we can have a hybrid meeting\, just let me know if you 
+ prefer Zoom (link above)\,\n\nAll very best\,\nChristine\nFrom: Christine 
+ Parsons <christine.parsons@cas.au.dk>\nDate: Friday\, 22 October 2021 at 1
+ 3.02\nTo: Arnault-Quentin Vermillet <arnault@clin.au.dk>\, Lina Elkjær Pe
+ dersen <201905535@post.au.dk>\, Anja Feibel Meerwald <202008898@post.au.dk
+ >\, Sara Kolding <sarakolding@live.dk>\nSubject: Doodle poll for meeting t
+ ime\n\nDear Lina\, Arnault\, Anja and Sara\,\n\nThank you all for agreeing
+  to be part of this project.\nI am arrange a time for a meeting re our COB
+ E lab study. We can either meet on zoom or in person\, depending on your a
+ vailability or a hybrid of both.\nAnja and Sara – Lina is a working on t
+ his project for her Bachelors thesis and Arnault is my PhD student\, and w
+ ill be the one in charge of the day to day running of the study.\n\nI real
+ ly look forward to discussing with you all. I hope we can find a suitable 
+ time to meet:\nhttps://doodle.com/poll/2ck8n2h7cvbvykwx?utm_source=poll&ut
+ m_medium=link\nAll the best\,\n\nChristine\n\n\n\nChristine Parsons\nAssoc
+ iate Professor\n\nPhone: (+45) 87162127\nEmail: christine.parsons@clin.au.
+ dk<mailto:christine.parsons@clin.au.dk>\nInstitute for Clinical Medicine\n
+ Faculty of Health\, Aarhus University\nInteracting Minds Center\, Jens Chr
+ . Skous Vej 4\, Building 1483\, 3rd floor\n8000 Aarhus C\n\n\n
+UID:F9E6A04A-FC52-411D-B1F9-205111821E72
+SUMMARY;LANGUAGE=en-US:Doodle poll for meeting time 
+DTSTART;TZID=Central Europe Standard Time:20211026T130000
+DTEND;TZID=Central Europe Standard Time:20211026T134500
+CLASS:PUBLIC
+PRIORITY:5
+DTSTAMP:20211024T081655Z
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+SEQUENCE:0
+LOCATION;LANGUAGE=en-US:Christine's office or Zoom https://aarhusuniversity
+ .zoom.us/my/ceparsons
+X-MICROSOFT-CDO-APPT-SEQUENCE:0
+X-MICROSOFT-CDO-OWNERAPPTID:2119876632
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+X-MICROSOFT-CDO-ALLDAYEVENT:FALSE
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-CDO-INSTTYPE:0
+X-MICROSOFT-DONOTFORWARDMEETING:FALSE
+X-MICROSOFT-DISALLOW-COUNTER:FALSE
+X-MICROSOFT-LOCATIONS:[{"DisplayName":"Christine's office or Zoom https://a
+ arhusuniversity.zoom.us/my/ceparsons"\,"LocationAnnotation":""\,"LocationU
+ ri":""\,"LocationStreet":""\,"LocationCity":""\,"LocationState":""\,"Locat
+ ionCountry":""\,"LocationPostalCode":""\,"LocationFullAddress":""}]
+BEGIN:VALARM
+DESCRIPTION:REMINDER
+TRIGGER;RELATED=START:-PT15M
+ACTION:DISPLAY
+END:VALARM
+END:VEVENT
+END:VCALENDAR
