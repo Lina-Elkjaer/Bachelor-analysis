@@ -18,21 +18,110 @@ library(groupdata2)
 
 #install.packages("janitor")
 library(janitor)
+library(brms)
+
+#install.packages("lubridate")
+library(lubridate)
+
+#Loading data 
+df <- read_csv("DF_BA_test.csv")
+
+
+df <- df %>% 
+  mutate(
+    ID = paste(id_in_group, dyad_name),
+    gender = as.factor(gender), 
+    dyad_name = ifelse(dyad_name == "INESTIMABLE NAVY ROCKHOPPER PENGUIN 96", "UNLIMITED SEPIA MALTESE 98", dyad_name)
+  )
+
+sounddf<- read_csv("./Data/v0(1).csv")
+
+sounddf <- sounddf %>% 
+  group_by(stimulus)%>% 
+  mutate(
+    RT_new = sum(RT),
+    startms = time,
+    ) %>% 
+  filter(RT_new==RT) %>% 
+  filter(!(RT==0 & iteration!=4)) %>% 
+  arrange(startSequence) %>% 
+  ungroup()%>% 
+  separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+  mutate(
+    stim_order = 1:8, 
+    RT_new = NULL,
+    end = NULL,
+    start = NULL,
+    dyad_name = id,
+    volume = NULL, 
+    id = NULL,
+    date = NULL,
+    response = ifelse(response=="Q", "Left", "Right"),
+    #stim_category = ifelse(stimulus=="Alarm 1"|
+                           #stimulus=="Alarm 2"| 
+                           #stimulus=="Alarm 3"|
+                           #stimulus=="Alarm 4", "Alarm", "Cry")
+    ) 
+
+
+
+sounddf %>% 
+  mutate(
+    as_datetime(time))
+
+
+
+
+
+demographics_df <- df %>% 
+  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
+  unique() %>% 
+  mutate(
+    response = position, 
+    position = NULL
+  ) 
+
+
+dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
+
+
+dfmerged <- dfmerged %>% 
+   separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
+
+
+
+
+
+
 ```
 
+```{r BAYESIAN?}
+
+get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
+
+
+m1_prior <- 
+  brm(data=df,
+      family = binomial(),
+      response ~ 1 + gender:stim_category + (1|ID),
+      prior = c(prior(flat),)
+      
+      
+
+```
 
 
 
 ```{r PLOTTING}
 # Plotting data:
-df %>% 
+dfmerged %>% 
   ggplot() +
-  aes(x=id_in_group, y=time_spent) +
+  aes(x=as.factor(stim_order), y=gender, color=stim_category) +
   geom_point() +
   geom_smooth(method = "lm") +
   theme_classic()
 
-
+#Where is it coded who pressed the button??? In this plot it looks like we responded every time, but we did not... Maybe it is because we merge by response????
 
 ggplot(data=df, aes(x=time_spent)) + 
       geom_bar(aes(y = ..prop.., fill = success), position = "dodge")+
@@ -41,29 +130,55 @@ ggplot(data=df, aes(x=time_spent)) +
 
 
 
-```
-
-```
-
-
-```{r PLOTTING}
-# Plotting data:
-df %>% 
-  ggplot() +
-  aes(x=id_in_group, y=time_spent) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  theme_classic()
 
 
 
-ggplot(data=df, aes(x=time_spent)) + 
-      geom_bar(aes(y = ..prop.., fill = success), position = "dodge")+
-  facet_wrap(.~id_in_group)+
-  theme_linedraw()
 
 
 
 ```
 
+
+```{r MODELS}
+m1 <- glmer(press ~ gender:sound_type + (1 | ID), dfmerged, family= "binomial")
+
+
+```
+
+
+
+```{r SIMULATION}
+
+set.seed(24)
+
+#size (40) is the number of trials within each of the 100 rounds 
+rbinom(100, 40, 0.5)
+
+
+
+```
+
+
+
+
+```{r TRYING WinBUGS}
+bugsdir <- "~/Desktop/Bachelor/winbugs14_full_patched/WinBUGS14/" #Set WinBUGS directory, adjust as needed
+
+k <- 5
+n <- 10
+
+data <- list("k", "n")
+myinits <- list(
+list(theta = 0.1), #chain 1 starting value
+list(theta = 0.9)) #chain 2 starting value
+
+parameters <- c("theta")
+
+samples <- bugs(data, inits=myinits, parameters,
+                model.file ="Rate_1.txt",
+                n.chains=2, n.iter=20000, n.burnin=1,n.thin=1,
+                DIC=T, bugs.directory=bugsdir,
+               codaPkg=F, debug=F)
+
+```
 
