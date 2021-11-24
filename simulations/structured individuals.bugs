@@ -1,0 +1,23 @@
+model{
+   # We define a rate parameter for each individual i
+   for (i in 1:n_ind) {
+      # Each individual rate is drawn from a normal distribution with mean mu and precision 1/sqrt(sd)
+      # Here I use a truncated normal for pedagogical reasons:
+      # 1. normal is familiar and easy to understand
+      # 2. our results have to be bounded between 0 and 1
+      # But you might want to give it a try with a beta distribution ;)
+      rate[i] ~ dnorm(mu, 1/sqrt(sd)) T(0.001, .999) # <- T() allows you to set limits
+   }
+
+   # Set priors for mu and sd
+   # stupid but simple since nothing can really go beyond 0 or 1
+   mu ~ dunif(0,1)
+   sd ~ dunif(0,1)
+
+      for (t in 1:n_trial) {
+         # we have a vector with i rates in it (i being the number of individuals)
+         # for answer t, we check the corresponding individual (position t in ind vector)
+         # then we use the rate of this individual
+         answer[t] ~ dbern(rate[ind[t]])
+      }
+}

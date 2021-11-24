@@ -1,0 +1,13 @@
+model{
+   # We define a rate parameter for each individual i (all with same prior)
+   for (i in 1:n_ind) {
+      # stupid prior
+      rate[i] ~ dunif(0,1)
+   }
+      for (t in 1:n_trial) {
+         # we have a vector with i rates in it (i being the number of individuals)
+         # for answer t, we check the corresponding individual (position t in ind vector)
+         # then we use the rate of this individual
+         answer[t] ~ dbern(rate[ind[t]])
+      }
+}

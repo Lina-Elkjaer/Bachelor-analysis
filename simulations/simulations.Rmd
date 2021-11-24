@@ -1,0 +1,585 @@
+```{r}
+library(tidyverse)
+install.packages("R2jags")
+library(R2jags)
+library(coda)
+library(boot)
+set.seed(1995)
+setwd("/simulations")
+
+```
+
+# Preparing
+```{r}
+## First, we set our data structure
+
+# We have i participants (here 100)
+i = 100
+# participants have different genders (2)
+g = 2
+# each participant conducts n trials (8)
+n = 8
+
+# Let's now create the baseline data and combine it in a df
+# Baseline data doesn't contain the output variable yet
+id = rep(c(1:i), each=n) # creates i participants with each n rows
+trial = rep(c(1:n), i) # repeat 1 to n trials for i participants
+gender = rep(c(0,1), i/2, each=n) # repeat i/2 so that we get half female, half male
+
+# And combine
+data <- tibble(id, gender, trial) %>%
+    arrange(id, trial)
+View(data)
+
+## Now the output variable
+# each trial is a binary decision (answered / not answered ; 1/0)
+# So we can use a bernoulli distribution
+# bernoulli takes only one argument, a probablility (or rate), to answer
+```
+
+# 1. Simple unique rate
+## Maybe there is one underlying rate of answer that all humans follow?
+```{r}
+## We can set the rate ourself for simulation purpose
+rate = .3
+# generate the amount of data necessary
+# That is, n trials for i individuals, using that rate
+output <- rbernoulli(n*i, rate) %>%
+    as.numeric()
+# and add it to the data df
+data <- data %>%
+    mutate(answer = output)
+View(data)
+
+## we can do some quick plots of the data to check what we have
+# Answers in time
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(answer, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender (later I switched to points which I think looks better)
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), answer = mean(answer)),
+                aes(color=factor(gender)), size=2)
+# Cumulative sum of answer through time
+data <- data %>%
+    group_by(id) %>%
+    mutate(sum = cumsum(answer)) %>% # we calculate it
+    ungroup()
+data %>%
+    ggplot(aes(trial, jitter(sum, factor = .25), color=factor(gender))) +
+    geom_line(aes(group=id)) +
+    geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
+
+## Now the model
+# In jags framework, we have to explicitely state:
+#   - the data
+#   - the size of the data
+# And put it in a list
+
+# list the data used
+answer <- data$answer
+n_ind <- length(unique(data$id))
+n_trial <- length(unique(data$trial))
+d <- list("answer", "n_ind", "n_trial")
+
+# Then we state the parameters that we want to observe
+# parameters to be monitored:
+parameters <- c("rate")
+
+# Fit the model (note that I use .parralel to speed the process with multicore)
+# See the Rate.bugs file for the implementation of the model
+simple <- jags.parallel(d, inits=NULL, parameters,
+	 			 model.file ="Rate.bugs", n.chains=3, n.iter=10000,
+         n.burnin=2500, n.thin=1, DIC=T)
+simple # not bad, results are congruent and we get the idea
+```
+
+# 2. Full individual differences
+## Or maybe all humans are fundamentally different
+```{r}
+# full individual difference means we model 1 rate per person
+# to avoid having to manually code that, let's just draw from a uniform distribution
+# that's basically maximum entropy of rates
+# We draw i rates, strictly between 0 and 1
+rate = runif(i, 0, 1)
+
+rate %>% # what does this look like?
+    tibble() %>%
+    ggplot(aes(rate)) +
+    geom_density(color = "blue", size=2)
+
+# Then our trials
+# For each rate, we generate n draws
+output <- map2(n, rate, rbernoulli) %>%
+    unlist() %>% # output is a matrix, let's simplify it
+    as.numeric() # transform from TRUE/FALSE to 1/0
+
+# put all the data together
+data <- tibble(id, gender, rate=rep(rate, each = 8), trial, answer = output) %>%
+    arrange(id, trial)
+View(data)
+
+## quick look
+# Makes sense that with maximum entropy, overall mean is around .5
+# Answers in time
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(answer, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), answer = mean(answer)),
+                aes(color=factor(gender)), size=2)
+# Cumulative sum of answer through time
+data <- data %>%
+    group_by(id) %>%
+    mutate(sum = cumsum(answer)) %>%
+    ungroup()
+data %>%
+    ggplot(aes(trial, jitter(sum, factor = .25), color=factor(gender))) +
+    geom_line(aes(group=id)) +
+    geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
+
+## Let's fit the model
+
+# list the data used
+answer <- data$answer
+ind <- data$id
+# we need to know how many participants to loop through them in the model (see bugs file)
+n_ind <- length(unique(data$id))
+n_trial <- length(data$trial)
+d <- list("answer", "ind", "n_ind", "n_trial")
+
+# parameters to be monitored:
+parameters <- c("rate")
+
+# Fit the model
+individuals <- jags.parallel(d, inits=NULL, parameters,
+	 			 model.file ="individual rate.bugs", n.chains=3, n.iter=10000,
+         n.burnin=2500, n.thin=1, DIC=T)
+individuals
+
+# Let's check how good this was
+# we extract the predicted mean values
+prediction <- individuals$BUGSoutput$summary[,1]
+prediction <- prediction[1:i+1] # get rid of the deviance
+prediction <- as.vector(prediction) # get rid of names
+
+tibble(rate, prediction) %>%
+    mutate(difference = abs(rate - prediction)) %>%
+    View()# meh, it is ok but not great, probably because we have few trials per person
+# plotting the difference can be a good idea too ;)
+
+# keep in mind that we're only using one point estimate (the mean) here
+# If we take uncertainty into account, it is reasonable
+# But still our estimates are not super precise
+# (not the similar level of uncertainty since we have the same amount of response for everyone)
+prediction.HCI <- individuals$BUGSoutput$summary[,7]
+prediction.HCI <- as.vector(prediction.HCI[1:i+1])
+prediction.LCI <- individuals$BUGSoutput$summary[,2]
+prediction.LCI <- as.vector(prediction.LCI[1:i+1])
+tibble(rate, LCI = prediction.LCI, prediction, HCI = prediction.HCI) %>%
+    mutate(difference = abs(rate - prediction))
+```
+
+# 3. Structured difference
+## Humans have a lot of things in common, so maybe individual differences are not so extreme
+```{r}
+# In this model we add an extra level
+# To see what happens, let's run it on the previous simulated data (with full entropy of rates)
+# parameters to be monitored:
+parameters <- c("mu", "sd", "rate")
+structured_ind <- jags.parallel(d, inits=NULL, parameters,
+	 			 model.file ="structured individuals.bugs", n.chains=3, n.iter=10000,
+         n.burnin=2500, n.thin=1, DIC=T)
+structured_ind
+
+# We got point estimate mean and sd at .442 and .602, what does that look like?
+# (May vary between runs depending on simulated data)
+tibble(
+    # dnorm generates the estimated density value of a point
+    # unlike rnorm that draws n sample from such distribution
+    sim = dnorm(seq(0,1,.05), mean=.442, sd=.602), # plotting density on y
+    x = seq(0,1,.05) # define x axis to be between 0 and 1
+    ) %>%
+    ggplot(aes(x, sim)) +
+    geom_line(color = "red", size=2)
+    # makes sense given that we generated the data with a uniform!
+    # And that is without taking the full distribution of these parameters into account
+
+
+# So let's check these posterior distributions
+tibble(mu = structured_ind$BUGSoutput$sims.list$mu,
+        sd = structured_ind$BUGSoutput$sims.list$sd) %>%
+    # pivot them to look at both at the same time
+    pivot_longer(cols = everything() , names_to = "parameter", values_to = "posterior")  %>%
+    ggplot(aes(posterior, fill = parameter)) +
+    geom_density(alpha = .6) 
+    # Ok, combination of these pretty much covers the whole spectrum of uniform from 0 to 1
+
+# Let's actually sample some possible rates based on this
+post_sim <- tibble(mu = structured_ind$BUGSoutput$sims.list$mu, # posterior for mean (samples)
+        sd = structured_ind$BUGSoutput$sims.list$sd) %>% # posterior for sd
+    # Generate a thousand observation for each combination of mu and sd
+    mutate(sim = Map(rnorm, 1000, mu, sd))
+    # if this takes too long, take a subset (there is 22000 combinations or so)
+
+# let's squich everything into one long vector
+# Then we can plot the distribution of simulated values from all these combination of mean and sd
+unlist(post_sim, use.names = FALSE) %>%
+    tibble(sim = .) %>%
+    filter(sim > 0 & sim < 1) %>% # remember we are using truncated normal
+    ggplot(aes(sim)) +
+    geom_density(fill = "green", alpha = .6)
+    # that's pretty wide
+    # probably as wide as we can get trying to model a uniform distribution with a normal one
+
+# Let's extract rates again compare with full individual difference
+prediction.struct <- structured_ind$BUGSoutput$summary[,1]
+prediction.struct <- prediction.struct[1:i+2] # get rid of the deviance and mean
+prediction.struct <- as.vector(prediction.struct) # get rid of names
+
+compare_predictions <- tibble(id = c(1:100), real = rate, ind = prediction, struct = prediction.struct) %>%
+    mutate(ind_diff = abs(real - ind),
+            struct_diff = abs(real - struct))
+View(compare_predictions)
+
+# We see that in our structured individual model,
+# every estimate is pooled towards the overall mean
+# In this specific case, we see that it doesn't help us much compared to a model
+# where each individual is modelled independently
+# That's really because individuals have nothing in common
+# (since they were drawn from a uniform distribution)!!
+
+# To see the difference, try running both models again
+# when individual rates are drawn from a beta distribution instead for example? (see next section)
+# And compare the difference between the predictions of a full independent vs. a structured model
+```
+
+
+# 4. Adding Gender
+## earlier we said that all humans are different from each other
+## But since they all come from the same group, they are not that different
+## One way to account for Gender is to add one more level
+## And consider male and female as 2 independent groups 
+## that explains the variation between individuals
+## So our hierarchy goes: indivdual <--- gender (<--- human)
+```{r}
+# Let's first simulate our data
+
+### Define new variables:
+# Here, we are increasing the difficulty a notch
+# I am going to use a Beta distribution to model the overall population distribution
+# And to make the results more interpretable, we are going to reparametrise it
+# Using the mean and concentration (kappa), a parameter indicating variance
+# kappa represents the accumulation of evidence for the mean
+# the higher it is, the more the distribution is "concentrated" around it
+# and the smaller it is, the more it spreads away from the mean
+mu = .6
+kappa = 22 # an sd of about .1 for central values
+            # it behaves a bit differently with values at extremities, ex: .1 or .9
+alpha = (kappa - 1) * mu
+beta = (kappa - 1) * (1 - mu)
+
+# what does this look like?
+# Try different values of mu and kappa to get more familiar
+tibble(rate = rbeta(10000, alpha, beta)) %>%
+    ggplot(aes(rate)) +
+    geom_density(color = "blue", size=2) +
+    xlim(0, 1)
+
+# Let's write a function that reparametrise the beta distribution and draw samples
+mu_rbinom <- function(n, mu, kappa){
+    alpha = (kappa - 1) * mu
+    beta = (kappa - 1) * (1 - mu)
+
+    return(rbeta(n, alpha, beta))
+}
+
+# So now let's include Gender differences in the rate
+# We have 2 separate population (gender 0 and 1)
+# We can model them as having 2 different means but the same variation
+# (Although we could also assume different variance)
+mu_0 <- .5
+mu_1 <- .7
+kappa = 22
+
+rates <- ifelse(rep(c(0,1), i/2) == 1, # recreate list of genders
+                    mu_rbinom(i, mu_1, kappa), # if gender = 1, use mu_1
+                    mu_rbinom(i, mu_0, kappa)) # if gender = 0, use mu_0
+
+# add to prexisting data
+data <- data  %>%
+    mutate(rate = rep(rates, each = 8))
+# plot to check
+data %>%
+    ggplot(aes(rate)) +
+        geom_density(aes(fill=factor(gender)), alpha = .6) +
+        geom_density(color = "red", size = 2) # super imposing the overall distribution
+
+# generate draws for each rate
+data <- data  %>%
+    mutate(answer = map2(1, rate, rbernoulli) %>%
+    unlist() %>% # output is a matrix, let's simplify it
+    as.numeric() # transform from TRUE/FALSE to 1/0
+    ) %>%
+    # recalculate sums
+    group_by(id) %>%
+    mutate( sum = cumsum(answer)) %>%
+    ungroup()
+
+
+# the usual plots
+# Answers in time
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,answer)) +
+    # This is a bit clearer to read than the line plot
+    geom_jitter(aes(color=factor(gender),group=id), width=.15, height=.15) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), answer = mean(answer)),
+                aes(color=factor(gender)), size=2)
+# Cumsum
+data %>%
+    ggplot(aes(trial, jitter(sum, factor = .25), color=factor(gender))) +
+    geom_line(aes(group=id)) +
+    geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
+
+
+# Time to fit!
+answer <- data$answer
+# Since we estimate individual rates and individual rates depend on gender
+# we want a vector with everyone's gender (only once)
+# the +1 is for the coherency of the loop in the bugs file (from 1 to 2 and not 0 to 2)
+gender <- filter(data, trial == 1)$gender + 1
+ind <- data$id
+n_trial <- length(data$id)
+n_ind <- length(unique(data$id)) 
+n_gender <- length(unique(data$gender))
+dat <- list("answer", "gender", "ind", "n_trial", "n_ind", "n_gender")
+parameters <- c("rate", "mu", "kappa")
+
+structured_gen <- jags.parallel(dat, inits=NULL, parameters, model.file= "structured gender.bugs",
+                            n.chains=3, n.iter=10000, n.burnin=2500, n.thin=1, DIC=T)
+structured_gen
+
+
+# Let's plot the posterior distribution of the mean for both genders
+tibble(mu_0 = structured_gen$BUGSoutput$sims.list$mu[,1],
+        mu_1 = structured_gen$BUGSoutput$sims.list$mu[,2]) %>%
+    # pivot them to look at both at the same time
+    pivot_longer(cols = everything() , names_to = "parameter", values_to = "posterior")  %>%
+    ggplot(aes(posterior, fill = parameter)) +
+    geom_density(alpha = .6) # Nice, remember we started with .5 and .7
+# What about kappa?
+tibble(kappa = structured_gen$BUGSoutput$sims.list$kappa) %>%
+    ggplot(aes(kappa)) +
+    geom_density(fill = "blue", alpha = .6)
+    # Mean is very close to actual value
+    # We still have a wide uncertainty, but we also started with a crazy prior
+    # We also have only 8 trial per person
+```
+
+
+# 5. Independence of individual and gender effect
+## Another way would be to consider that gender is independent of individual effect
+## All humans are (kind of) differently succeptible to sound for different reasons
+## Some that might be independent of gender (age, culture, temperament, hearing,...)
+## We now have 2 effects that add up
+```{r}
+# And we want to have 2 independent effects:
+# 1. a general inter-individual differences effect
+# 2. a gender effect
+# Difficulty uo again since we need to start using linear algebra
+# The hard part is, with beta distribution, we are bounded between 0 and 1
+# We need to move to logit space
+
+# define logit and inverse logit function to scale the parameters
+logit <- function(p){
+    log( (p) / (1-p) )
+} # take a value strictly between 0 and 1 and expand it between -inf and +inf
+
+inv.logit <- function(p) {
+    (1) / (1 + exp(-p))
+} # takes a value between -inf and + inf and squish it strictly between 0 and 1
+# quick checks
+logit(inv.logit(.5))
+inv.logit(logit(.5))
+logit(.63)
+inv.logit(0.5322168) # all good
+
+## New parameters:
+# Remember, these parameters are in logit space:
+mean = .4 # corresponds to a mean of .6 in probablity
+sd = .5 # makes an sd of about .1 around .6
+gender_effect= 1 # a jump of .2 in probability for gender 1
+
+# what does it look like?
+tibble(rate_0 = inv.logit(rnorm(10000, mean, sd)),
+        rate_1 = inv.logit(rnorm(10000, mean, sd) + 1)) %>%
+    pivot_longer(cols = everything() , names_to = "gender", values_to = "value")  %>%
+    ggplot(aes(value, fill = gender)) +
+    geom_density(alpha=.5) +
+    xlim(0, 1) # good!
+
+# generate the rates
+ind_baseline <- rnorm(i, mean, sd) # first, each individual's baseline
+# Then add the gender effect
+rates <- inv.logit(
+            ind_baseline +
+            rep(c(0,1), i/50) * gender_effect
+            )
+# add rates to prexisting data
+data <- data  %>%
+    mutate(rate = rep(rates, each = 8))
+# Then, generate draws for each rate
+data <- data  %>%
+    mutate(answer = map2(1, rate, rbernoulli) %>%
+    unlist() %>% # output is a matrix, let's simplify it
+    as.numeric() # transform from TRUE/FALSE to 1/0
+    ) %>%
+    # recalculate sums
+    group_by(id) %>%
+    mutate( sum = cumsum(answer)) %>%
+    ungroup()
+
+# Let's check if we've reached our target mean values
+data %>%
+    group_by(gender) %>%
+    summarise(mean(rate)) # should be pretty good
+
+
+#### Time to fit!
+answer <- data$answer
+gender <- filter(data, trial == 1)$gender
+ind <- data$id
+n_trial <- length(data$id)
+n_ind <- length(unique(data$id))
+dat <- list("answer", "gender", "ind", "n_trial", "n_ind")
+parameters <- c("mu", "sd", "rate", "baseline", "gender_effect")
+
+ind_gen <- jags.parallel(dat, inits=NULL, parameters, model.file= "individuals and genders.bugs",
+                            n.chains=3, n.iter=10000, n.burnin=2500, n.thin=1, DIC=T)
+ind_gen
+
+# Let's check posterior distributions again, for both gender sepaerately
+
+# A bit of an approximation since we only draw 1 data point for each combination of mean and sd
+# but with this sample size, should be good enough
+# baseline sample 22500 from =/= normal distribution with mean and sd value sampled from our parameters posteriors
+tibble(baseline = inv.logit(rnorm( 22500,
+                            ind_gen$BUGSoutput$sims.list$mu, 
+                            ind_gen$BUGSoutput$sims.list$sd
+                        )),
+        gender1 = inv.logit( # do the same as above, but add sampled gender_effect
+                            rnorm(22500, 
+                                ind_gen$BUGSoutput$sims.list$mu, 
+                                ind_gen$BUGSoutput$sims.list$sd
+                            ) + ind_gen$BUGSoutput$sims.list$gender_effect)
+        )  %>%
+    # pivot them to look at both at the same time
+    pivot_longer(cols = everything() , names_to = "parameter", values_to = "posterior")  %>%
+    ggplot(aes(posterior, fill = parameter)) +
+    geom_density(alpha = .6) # Nice, remember we started with .5 and .7```
+# Compared to the parameter values of the simulation, that's pretty accurate!
+
+# But you probably noticed that there is something wrong here.
+# The variation from gender 0 is "baked into" the baseline score
+# So the supposed individual difference is not entirely independent of gender here
+# Let's see how we can do this differently
+```
+
+# 5. Gender
+## Now that we're getting used to hierarchy, let's see if we can have both gender and individual
+## As 2 separate hierarchical processes
+```{r}
+# We could use the previous data
+# but let's simulate the process as we model it
+
+## New parameters:
+# Like before, each individual is slightly more likely to answer than average
+# with a bit of variation
+mean_individual = .4 # mean of .6
+sd_individual = .5
+# And now our gender effect, separated in 2, one for each gender
+mean_gender_0 = 1 # population from gender 0 is very sensitive (mean of .8)
+mean_gender_1 = -1# population from gender 1 is rather insensitive (mean of .4)
+sd_gender = 1 # But there is a large variation of how much a participant's gender influences their behaviour
+
+# generate the baseline
+ind_baseline <- rnorm(i, mean_individual, sd_individual) # first, each individual's baseline
+
+# generate gender effect
+# Using the formula (gender)*rnorm(mu1, sd) + (1-gender)*rnorm(mu0, sd)
+# So that for gender == 1, we get 1*rnorm(mu1, sd) + 0*rnorm(mu0, sd) <=> rnorm(mu1,sd1)
+# And the opposite for gender == 0
+gender_effect <- 
+    rep(c(0,1), i/2) * rnorm(i, mean_gender_0, sd_gender) + 
+    rep(c(1,0), i/2) * rnorm(i, mean_gender_1, sd_gender)
+
+# generate rates
+rates <- inv.logit(
+            ind_baseline + gender_effect
+            )
+# add rates to prexisting data
+data <- data  %>%
+    mutate(rate = rep(rates, each = 8)) %>%
+# And again, generate draws for each rate
+    mutate(answer = map2(1, rate, rbernoulli) %>%
+    unlist() %>% # output is a matrix, let's simplify it
+    as.numeric() # transform from TRUE/FALSE to 1/0
+    ) %>%
+    # recalculate sums
+    group_by(id) %>%
+    mutate( sum = cumsum(answer)) %>%
+    ungroup()
+
+# Do we have what we want?
+data %>%
+    group_by(gender) %>%
+    summarise(mean(rate), sd(rate)) # not too bad
+# Let's plot
+data %>%
+    ggplot(aes(rate, fill=factor(gender))) +
+    geom_density()
+
+#### Time to fit!
+answer <- data$answer
+gender <- filter(data, trial == 1)$gender + 1
+ind <- data$id
+n_trial <- length(data$id)
+n_ind <- length(unique(data$id))
+n_gender <- length(unique(data$gender))
+dat <- list("answer", "gender", "ind", "n_trial", "n_ind", "n_gender")
+# We won't look at individual rates and baselines so let's not display them for clarity
+parameters <- c("mu", "sd", "mu_gender", "sd_gender")
+
+# Took individual rates out
+ind_gen2 <- jags.parallel(dat, inits=NULL, parameters, model.file= "individuals with independent genders.bugs",
+                            n.chains=3, n.iter=10000, n.burnin=2500, n.thin=1, DIC=T)
+ind_gen2
+# We can see that we have some covergence issues
+# Seems mostly related to the fact that it has a hard time parsing the variance from gender and individual
+# Probably since gender and individual are correlated ? (An individual only has one gender here)
+# So probably not the best model to use, but good for the demonstration. :)
+
+# Let's check the posteriors
+tibble(baseline = inv.logit(rnorm( 22500,
+                            ind_gen2$BUGSoutput$sims.list$mu, 
+                            ind_gen2$BUGSoutput$sims.list$sd
+                        )),
+        gender_0 = inv.logit(rnorm( 22500,
+                            ind_gen2$BUGSoutput$sims.list$mu_gender[,1], 
+                            ind_gen2$BUGSoutput$sims.list$sd_gender
+                        )),
+        gender_1 = inv.logit(rnorm( 22500,
+                            ind_gen2$BUGSoutput$sims.list$mu_gender[,2], 
+                            ind_gen2$BUGSoutput$sims.list$sd_gender
+                        )),
+        )  %>%
+    # pivot them to look at both at the same time
+    pivot_longer(cols = everything() , names_to = "parameter", values_to = "posterior")  %>%
+    ggplot(aes(posterior, fill = parameter)) +
+    geom_density(alpha = .6) # We can see that the baseline individual variance is overinflated
+```

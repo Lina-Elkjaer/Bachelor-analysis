@@ -1,0 +1,32 @@
+model{
+
+   # Set prior for Kappa (again, stupid but goes from very appart to very close)
+   kappa ~ dunif(0,100)
+
+   # GEnder related effect
+   for (g in 1:n_gender)
+   
+   {
+      # Set priors for mu (Another stupid but simple)
+      mu[g] ~ dunif(0,1)
+
+      # reparametrise
+      alpha[g] = (kappa - 1) * mu[g]
+      beta[g] = (kappa - 1) * (1 - mu[g])
+   }
+
+   
+   for (i in 1:n_ind) {
+      # Each individual rate is drawn from a beta
+      # the parameters depend on the gender 
+      rate[i] ~ dbeta(alpha[gender[i]], beta[gender[i]])
+   }
+
+
+   for (t in 1:n_trial) {
+      # we have a vector with i rates in it (i being the number of individuals)
+      # for answer t, we check the corresponding individual (position t in ind vector)
+      # then we use the rate of this individual
+      answer[t] ~ dbern(rate[ind[t]])
+   }
+}

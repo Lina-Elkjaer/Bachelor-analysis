@@ -1,0 +1,34 @@
+model{
+
+   for (g in 1:n_gender){
+      # each gender
+      mu_gender[g] ~ dnorm(0, 1/sqrt(.1))
+   }
+
+   sd_gender ~ dexp(.01)
+
+   for (i in 1:n_ind) {
+      
+      gender_effect[i] ~ dnorm(mu_gender[gender[i]], 1/sd_gender)
+
+      # Each individual rate is define by the following equation
+      # with a logit link
+      logit(rate[i]) = baseline[i] + gender_effect[i]
+
+      # we want a hierarchy on individual effect
+      baseline[i] ~ dnorm(mu, 1/sqrt(sd))
+      
+   }
+
+   # Set prior for individual mean and sd (more serious priors)
+   mu ~ dnorm(0, 1/sqrt(.1))
+   sd ~ dexp(.01)
+
+   for (t in 1:n_trial) {
+      # we have a vector with i rates in it (i being the number of individuals)
+      # for answer t, we check the corresponding individual (position t in ind vector)
+      # then we use the rate of this individual
+      answer[t] ~ dbern(rate[ind[t]])
+   }
+
+}

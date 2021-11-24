@@ -1,0 +1,13 @@
+model{
+   # Prior, not smart but not the subject here
+   rate ~ dunif(0,1)
+   # Observed Counts
+   # Note that here, I include the nested structure of the data
+   # However, it is not used
+   for (i in 1:n_ind) {
+      for (t in 1:n_trial) {
+         # (i-1)*n_trial allows an offset per individual
+         answer[(i-1)*n_trial + t] ~ dbern(rate)
+      }
+   }
+}
