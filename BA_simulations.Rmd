@@ -18,8 +18,8 @@ library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
-install.packages("retimes")
-library(retimes)
+#install.packages("retimes")
+#library(retimes)
 set.seed(1997)
 
 ```
@@ -135,8 +135,8 @@ data %>%
 ```{r RT as outcome variable}
 
 #Creating a baseline reaction time. Here the response time is equally likely to be any value between 1000ms and 48048ms (the time when the sound is stopped). 
-#RT_baseline <- runif(i, 1000, 48048)                     # Draw i gamma distributed values
-RT_baseline <- rgamma(i, shape=6 ,scale=1000)   
+#RT_baseline <- runif(i, 1000, 48048)         #but this is not distributed like reactiontimes...
+RT_baseline <- rgamma(i, shape=6 ,scale=1)   
 
 
 RT_baseline %>% # what does this look like? It looks okay. However this is probably not realistic, the responsetimes cannot get long enough. #Probably models response time after an increment in soundlevel.
@@ -148,7 +148,7 @@ RT_baseline %>% # what does this look like? It looks okay. However this is proba
 
 data <- data  %>%
     mutate(RT_baseline = rep(RT_baseline, each = 8),
-           RT = rnorm(800, mean=RT_baseline/100, sd=8)) #NB I divided RT with 100 in order to make the sd have an effect
+           RT = rnorm(800, mean=RT_baseline, sd=1)) #NB I divided RT with 100 in order to make the sd have an effect
           # RT = RT-mean(RT)) #For mean centering (gaussian purposes)
 
 
@@ -368,14 +368,19 @@ data %>%
 
 ```{r Other method for simulation}
 
+devtools::install_version("retimes","0.1-2")
+library(retimes)
 
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
-  rt_dist1 <- rexgauss(100000, 300, 100, 200, positive = F)
+  rt_dist1 <- rexgauss(1000, 300, 100, 200, positive = F)
   # keep positive values only:
   rt_dist1 <- rt_dist1[rt_dist1 > 0]
   # give it a nicer name:
   Population_of_Good_Reaction_Times <- rt_dist1
 
+  
+?rexgauss()  
+  
 ```
 
