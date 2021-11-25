@@ -18,6 +18,8 @@ library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
+install.packages("retimes")
+library(retimes)
 set.seed(1997)
 
 ```
@@ -145,8 +147,9 @@ RT_baseline %>% # what does this look like? It looks okay. However this is proba
 
 
 data <- data  %>%
-    mutate(#RT_baseline = rep(RT_baseline, each = 8),
+    mutate(RT_baseline = rep(RT_baseline, each = 8),
            RT = rnorm(800, mean=RT_baseline/100, sd=8)) #NB I divided RT with 100 in order to make the sd have an effect
+          # RT = RT-mean(RT)) #For mean centering (gaussian purposes)
 
 
 ## quick look
@@ -162,33 +165,39 @@ data %>%
                 aes(color=factor(gender)), size=2)
 
 
-prior <- get_prior(data = data, family = gaussian(), RT ~ 1 + (1| gender) + (1| gender:id))
 
-m1_prior <-
+```
+
+
+```{r  GAUSSIAN}
+#Okay? With mean centered data
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+m1_prior_gaussian <-
   brm(data = data,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-     # prior = c(prior(normal(0, 1), class = Intercept),
-               # prior(normal(0, 1), class = b),
-               # prior(exponential(1), class = sd),
-                #prior(normal(1, 0.5), class = sigma)),
+     prior = c(prior(normal(0, 1), class = Intercept),
+               prior(normal(0, 1), class = b),
+               prior(exponential(1), class = sd),
+               prior(normal(1, 0.5), class = sigma)),
       #prior = c(prior(student_t(3, 59.6, 26.7), class = Intercept),
                 #prior(normal(0, 1), class = b),
                # prior(student_t(3, 0, 26.7), class = sd),
                 #prior(student_t(3, 0, 26.7), class = sigma)),
-     prior=c(prior,
-             prior(normal(0, 1), class = b)),
+     #prior=c(prior,
+             #prior(normal(0, 1), class = b)),
       cores=2,
       sample_prior = "only",
       control = list(adapt_delta = 0.999, max_treedepth = 15))
 
-pp_check(m1_prior, nsamples = 100)+
+pp_check(m1_prior_gaussian, nsamples = 100)+
   xlim(-20,20)+
   ggtitle("Figure 1 - M1 Prior Predictive Check")
 
 #################
 
-m1 <-
+m1_gaussian <-
   brm(data = data,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender)+ (1| gender:id),
@@ -199,34 +208,35 @@ m1 <-
       control = list(adapt_delta = 0.999, max_treedepth = 15))
 
 
-pp_check(m1, nsamples = 100)+
+pp_check(m1_gaussian, nsamples = 100)+
   xlim(-20,20)+
   ggtitle("Figure 2 - M1 Posterior Predictive Check")
 summary(m1)
 ```
 
 
-```{r}
-get_prior(data = data, family = Gamma(), RT ~ 1 + (1| gender) + (1| gender:id))
+```{r GAMMA}
+#Does not work. Nothing in the prior and posterior plots.
+prior<- get_prior(data = data, family = Gamma(link = log), RT ~ 1 + gender + (1| gender) + (1| gender:id))
 
 m1_prior <-
   brm(data = data,
-      family = Gamma(),
+      family = Gamma(link = log),
       RT ~ 1 + gender + (1| gender)+ (1| gender:id),
       #prior = c(prior(normal(0, 1), class = Intercept),
                 #prior(normal(0, 1), class = b),
                 #prior(exponential(1), class = sd)),
-      prior = c(prior(student_t(3, 0, 2.5), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(0.01, 0.01), class = shape)),
-     #prior=prior,
+      prior = c(prior(normal(80, 1), class = Intercept),
+                prior(unif(0, 1), class = b),
+                prior(exponential(1), class = sd),
+                prior(gamma(0.01), class = shape)),
+      #prior=c(prior, prior(unif(0, 1), class = b)),
       cores=2,
       sample_prior = "only",
       control = list(adapt_delta = 0.999, max_treedepth = 15))
 
 pp_check(m1_prior, nsamples = 100)+
-  xlim(0,2000)+
+  #xlim(0,200)+
   ggtitle("Figure 1 - M1 Prior Predictive Check")
 
 #################
@@ -246,5 +256,126 @@ pp_check(m1, nsamples = 100)+
   xlim(-20,20)+
   ggtitle("Figure 2 - M1 Posterior Predictive Check")
 summary(m1)
+
+
+
+?prior()
+```
+
+```{r EX GAUSSIAN}
+
+
+ get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+m1_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender) + (1| gender:id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      #prior = c(prior(normal(80, 1), class = Intercept),
+                #prior(student_t(10, 0, 1), class = b),
+                #prior(exponential(1), class = sd),
+                #prior(gamma(0.01), class = shape)),
+     #prior=prior,
+      cores=2,
+      sample_prior = "only",
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+
+pp_check(m1_prior, nsamples = 100)+
+  #xlim(0,200)+
+  ggtitle("Figure 1 - M1 Prior Predictive Check")
+
+#################
+
+m1 <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      cores = 2,
+      sample_prior = TRUE,
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+
+
+pp_check(m1, nsamples = 100)+
+  xlim(-20,200)+
+  ggtitle("Figure 2 - M1 Posterior Predictive Check")
+summary(m1)
+
+
+
+
+```
+
+
+
+
+
+
+
+
+```{r Trash simulation??}
+
+RT_baseline_f <- rgamma(i/2, shape=5 ,scale=1000)
+RT_baseline_m <- rgamma(i/2, shape=6 ,scale=1000)
+
+?rgamma
+
+
+RT_baseline_m %>% 
+    tibble() %>%
+    ggplot(aes(RT_baseline_m)) +
+    geom_density(color = "blue", size=2)
+
+RT_baseline_f %>% 
+    tibble() %>%
+    ggplot(aes(RT_baseline_f)) +
+    geom_density(color = "blue", size=2)
+
+
+
+data <- data  %>%
+    mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
+           RT = rnorm(800, mean=RT_baseline/100, sd=8), 
+           RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
+
+
+## quick look
+# Makes sense that with maximum entropy, overall mean is around .5
+# Answers in time
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+                aes(color=factor(gender)), size=2)
+
+
+
+
+
+```
+
+```{r Other method for simulation}
+
+
+# Simulate a population of "good" reaction times:
+  # generate an ex-Gaussian population:
+  rt_dist1 <- rexgauss(100000, 300, 100, 200, positive = F)
+  # keep positive values only:
+  rt_dist1 <- rt_dist1[rt_dist1 > 0]
+  # give it a nicer name:
+  Population_of_Good_Reaction_Times <- rt_dist1
+
 ```
 
