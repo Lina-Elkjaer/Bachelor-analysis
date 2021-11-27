@@ -366,21 +366,471 @@ data %>%
 
 ```
 
+
+
 ```{r Other method for simulation}
 
-devtools::install_version("retimes","0.1-2")
+#devtools::install_version("retimes","0.1-2")
 library(retimes)
 
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
-  rt_dist1 <- rexgauss(1000, 300, 100, 200, positive = F)
+  rt_dist1_base <- rexgauss(50, mu=600, sigma=100, 200, positive = F)
   # keep positive values only:
-  rt_dist1 <- rt_dist1[rt_dist1 > 0]
-  # give it a nicer name:
-  Population_of_Good_Reaction_Times <- rt_dist1
+  rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
+
+  rt_dist0_base <- rexgauss(50, mu=300, sigma=100, 200, positive = F)
+  # keep positive values only:
+  rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
+  
+  
+  data <- data  %>%
+    mutate(rt_dist = ifelse(gender==0, 
+                            rep(rt_dist0_base, each = 8),
+                            rep(rt_dist1_base, each = 8)),
+           RT = rnorm(800, mean=rt_dist, sd=100))
+  
+  
+  data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+                aes(color=factor(gender)), size=2)
+
+```
+
+
+
+
+
+
+```{r GAUSSIAN MODELS}
+
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
+  
+  m_gaus_simple_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender,
+      prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class= sigma)),
+      chains = 4,
+      cores=2,
+      sample_prior = "only",
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+  
+  
+ pp_check(m_simple_prior, nsamples = 100)+
+  xlim(0,1000)+
+  ggtitle("M_Simple Prior Predictive Check")
+ 
+##################
+  m_gaus_simple <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender,
+      prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class= sigma)),
+      chains = 4,
+      cores=2,
+      sample_prior = TRUE)
+  
+  
+ pp_check(m_gaus_simple, nsamples = 100)+
+  #xlim(0,1000)+
+  ggtitle("M_gaus_simple Posterior Predictive Check")
+
+#################################### M1 ############################################
+
+ get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| id))
+ 
+ 
+m1_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = "only")
+
+
+pp_check(m1_gaus_prior, nsamples = 100)+
+  ggtitle("M1 Prior Predictive Check")
 
   
-?rexgauss()  
+
+
+
+m1_gaus <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m1_gaus, nsamples = 100)+
+  ggtitle("M1 Posterior Predictive Check")
+
+    
+################################ M2 #################################################  
   
+   
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+m2_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender) + (1| gender:id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_gaus_prior, nsamples = 100)+
+  ggtitle("M2 Prior Predictive Check")
+
+#################
+
+m2_gaus <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m2_gaus, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+summary(m2)
+
+
+################################ M3 #################################################  
+  
+   
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
+
+m3_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender) + (1|id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m3_gaus_prior, nsamples = 100)+
+  ggtitle("M3 Prior Predictive Check")
+
+#################
+
+m3_gaus <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender) + (1|id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m3_gaus, nsamples = 100)+
+  ggtitle("M3 Posterior Predictive Check")
+
+```
+
+
+
+
+
+
+```{r EXGAUSSIAN MODELS}
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender)
+  
+  m_simple_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender,
+      prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      chains = 4,
+      cores=2,
+      sample_prior = "only",
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+  
+  
+ pp_check(m_simple_prior, nsamples = 100)+
+  xlim(0,1000)+
+  ggtitle("M_Simple Prior Predictive Check")
+ 
+##################
+   m_simple <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender,
+      prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      chains = 4,
+      cores=2,
+      sample_prior = TRUE)
+  
+  
+ pp_check(m_simple, nsamples = 100)+
+  #xlim(0,1000)+
+  ggtitle("M_simple Posterior Predictive Check")
+
+#################################### M1 ############################################
+
+ get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| id))
+ 
+ 
+m1_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = ,
+      sample_prior = "only")
+
+
+pp_check(m1_prior, nsamples = 100)+
+  ggtitle("M1 Prior Predictive Check")
+summary(m1) 
+  
+
+
+
+m1 <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = ,
+      sample_prior = TRUE)
+
+
+pp_check(m1, nsamples = 100)+
+  ggtitle("M1 Posterior Predictive Check")
+summary(m1) 
+    
+################################ M2 #################################################  
+  
+   
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+m2_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender) + (1| gender:id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_prior, nsamples = 100)+
+  ggtitle("M2 Prior Predictive Check")
+
+#################
+
+m2 <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m2, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+summary(m2)
+
+
+################################ M3 #################################################  
+  
+   
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
+
+m3_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender) + (1|id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m3_prior, nsamples = 100)+
+  ggtitle("M3 Prior Predictive Check")
+
+#################
+
+m3 <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender) + (1|id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m3, nsamples = 100)+
+  ggtitle("M3 Posterior Predictive Check")
+
+  
+```
+
+
+
+
+
+
+```{r GAMMA MODELS}
+#Have to remove anything less than 0 in order to do family= gamma 
+
+data <- data  %>%
+    mutate(RT = ifelse(RT<0, 1, RT))
+
+#ERRORMESSAGES.... PRODUCED NA'S and does not produce a graph in the posterior check
+################################ M2 #################################################  
+  
+   
+get_prior(data = data, family = Gamma(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+m2_gamma_prior <-
+  brm(data = data,
+      family = Gamma(),
+      RT ~ 1 + gender + (1| gender) + (1| gender:id),
+      prior = c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(gamma(0.01, 0.01), class = shape)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_gamma_prior, nsamples = 100)+
+  ggtitle("M2 Prior Predictive Check")
+
+#################
+
+m2_gamma <-
+  brm(data = data,
+      family = Gamma(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(gamma(1, 01), class = shape)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m2_gamma, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+summary(m2)
+```
+
+
+
+
+
+
+```{r MODEL COMPARISON}
+summary(m_simple)
+summary(m1)
+summary(m2)
+summary(m3)
+
+#m2 is best, next is m3, next is m1
+m_simple <- add_criterion(m_simple, "loo")
+m1 <- add_criterion(m1, "loo")
+m2 <- add_criterion(m2, "loo")
+m3 <- add_criterion(m3, "loo")
+
+
+loo_compare(m_simple,m1, m2, m3, criterion = "loo") %>% 
+  print(simplify = F)
+
+
+
+
+summary(m_gaus_simple)
+summary(m1_gaus)
+summary(m2_gaus)
+summary(m3_gaus)
+
+
+#m2 is best, next is m3, next is m1
+m_gaus_simple <- add_criterion(m_simple, "loo")
+m1_gaus <- add_criterion(m1, "loo")
+m2_gaus <- add_criterion(m2, "loo")
+m3_gaus <- add_criterion(m3, "loo")
+
+loo_compare(m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
+  print(simplify = F)
+
+loo_compare(m_simple, m1, m2, m3, m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
+  print(simplify = F)
+
 ```
 
