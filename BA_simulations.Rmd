@@ -476,7 +476,7 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
       control = list(adapt_delta = 0.999, max_treedepth = 15))
   
   
- pp_check(m_simple_prior, nsamples = 100)+
+ pp_check(m_gaus_simple_prior, nsamples = 100)+
   xlim(0,1000)+
   ggtitle("M_Simple Prior Predictive Check")
  
@@ -573,13 +573,16 @@ m2_gaus <-
                 prior(student_t(3, 0, 233), class= sigma)),
       cores = 2,
       chains = 4,
-      sample_prior = TRUE)
+      iter=3000,
+      sample_prior = TRUE,
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
 
 
 pp_check(m2_gaus, nsamples = 100)+
   ggtitle("M2 Posterior Predictive Check")
-summary(m2)
+summary(m2_gaus)
 
+?brm
 
 ################################ M3 #################################################  
   

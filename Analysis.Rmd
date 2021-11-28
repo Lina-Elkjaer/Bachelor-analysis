@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r Libraries}
 #Loading libraries
 library(tidyverse)
 library(ggplot2)
@@ -22,6 +22,114 @@ library(brms)
 
 #install.packages("lubridate")
 library(lubridate)
+
+```
+
+
+
+```{r PREPROC_FUNCTION}
+#Loading data 
+df <- read_csv("DF_BA_test.csv")
+
+
+df <- df %>% 
+  mutate(
+    ID = paste(id_in_group, dyad_name),
+    gender = as.factor(gender), 
+    dyad_name = ifelse(dyad_name == "INESTIMABLE NAVY ROCKHOPPER PENGUIN 96", "UNLIMITED SEPIA MALTESE 98", dyad_name)
+  )
+
+demographics_df <- df %>% 
+  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
+  unique() %>% 
+  mutate(
+    response = position, 
+    position = NULL
+  ) 
+
+
+#Loading all files to a list
+list <- list.files(path = "./Data_sound", pattern = ".csv", all.files = FALSE, full.names = TRUE)
+
+
+preproc_function <- function(filename) {
+  
+  #load data
+  sounddf <- read_csv(file = filename)
+  
+    sounddf <- sounddf %>% 
+    group_by(stimulus)%>% 
+    mutate(
+      RT_new = sum(RT),
+      startms = time,
+      ) %>% 
+    filter(RT_new==RT) %>% 
+    filter(!(RT==0 & iteration!=4)) %>% 
+    arrange(startSequence) %>% 
+    ungroup()%>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    mutate(
+      stim_order = 1:8, 
+      RT_new = NULL,
+      end = NULL,
+      start = NULL,
+      dyad_name = id,
+      volume = NULL, 
+      id = NULL,
+      date = NULL,
+      response = ifelse(response=="Q", "Left", "Right"),
+      response = ifelse(RT=="0", "None", response),
+      RT_from_onset = ifelse(RT=="0","0", RT-startms),
+      stim_category = ifelse(stimulus=="Alarm 1"|
+                             stimulus=="Alarm 2"| 
+                             stimulus=="Alarm 3"|
+                             stimulus=="Alarm 4", "Alarm", "Cry")
+    )
+  
+  dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
+  
+  dfmerged <- dfmerged %>% 
+    separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
+  
+  return(dfmerged)
+}
+
+
+try <- preproc_function("./Data_sound/v0(1).csv")
+
+df_new = list %>%
+    purrr::map_df(preproc_function)
+
+
+timedf <- try %>% 
+  mutate(
+    time1 = strptime(time, "%H:%M:%S"))
+
+?as_datetime()
+
+
+```
+
+
+
+
+```{r BAYESIAN}
+
+get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
+
+
+m1_prior <- 
+  brm(data=df,
+      family = binomial(),
+      response ~ 1 + gender:stim_category + (1|ID),
+      prior = c(prior(flat),)
+      
+      
+
+```
+
+
+```{r}
 
 #Loading data 
 df <- read_csv("DF_BA_test.csv")
@@ -94,93 +202,6 @@ dfmerged <- dfmerged %>%
 
 
 ```
-
-
-```{r PREPROC_FUNCTION}
-
-
-demographics_df <- df %>% 
-  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
-  unique() %>% 
-  mutate(
-    response = position, 
-    position = NULL
-  ) 
-
-
-#Loading all files to a list
-list <- list.files(path = "./Data_sound", pattern = ".csv", all.files = FALSE, full.names = TRUE)
-
-
-preproc_function <- function(filename) {
-  
-  #load data
-  sounddf <- read_csv(file = filename)
-  
-    sounddf <- sounddf %>% 
-    group_by(stimulus)%>% 
-    mutate(
-      RT_new = sum(RT),
-      startms = time,
-      ) %>% 
-    filter(RT_new==RT) %>% 
-    filter(!(RT==0 & iteration!=4)) %>% 
-    arrange(startSequence) %>% 
-    ungroup()%>% 
-    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
-    mutate(
-      stim_order = 1:8, 
-      RT_new = NULL,
-      end = NULL,
-      start = NULL,
-      dyad_name = id,
-      volume = NULL, 
-      id = NULL,
-      date = NULL,
-      response = ifelse(response=="Q", "Left", "Right"),
-      response = ifelse(RT=="0", "None", response),
-      RT_from_onset = ifelse(RT=="0","0", RT-startms),
-      stim_category = ifelse(stimulus=="Alarm 1"|
-                             stimulus=="Alarm 2"| 
-                             stimulus=="Alarm 3"|
-                             stimulus=="Alarm 4", "Alarm", "Cry"), 
-     # time = as_datetime(time)
-    )
-  
-  #dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
-  
-  #dfmerged <- dfmerged %>% 
-    #separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
-  
-  return(sounddf)
-}
-
-
-try <- preproc_function("./Data_sound/v0(1).csv")
-
-df_new = list %>%
-    purrr::map_df(preproc_function)
-
-```
-
-
-
-
-```{r BAYESIAN}
-
-get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
-
-
-m1_prior <- 
-  brm(data=df,
-      family = binomial(),
-      response ~ 1 + gender:stim_category + (1|ID),
-      prior = c(prior(flat),)
-      
-      
-
-```
-
 
 
 ```{r MDOELS FROM SIMULATION}
@@ -264,20 +285,6 @@ m1 <- glmer(press ~ gender:sound_type + (1 | ID), dfmerged, family= "binomial")
 
 
 ```
-
-
-
-```{r SIMULATION}
-
-set.seed(24)
-
-#size (40) is the number of trials within each of the 100 rounds 
-rbinom(100, 8, 0.5)
-
-
-
-```
-
 
 
 
