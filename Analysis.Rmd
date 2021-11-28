@@ -58,11 +58,13 @@ sounddf <- sounddf %>%
     date = NULL,
     response = ifelse(response=="Q", "Left", "Right"),
     response = ifelse(RT=="0", "None", response),
-    RT_from_onset = ifelse(RT=="0","0", RT-startms)
-    #stim_category = ifelse(stimulus=="Alarm 1"|
-                           #stimulus=="Alarm 2"| 
-                           #stimulus=="Alarm 3"|
-                           #stimulus=="Alarm 4", "Alarm", "Cry")
+    RT_from_onset = ifelse(RT=="0","0", RT-startms),
+    stim_category = ifelse(stimulus=="Alarm 1"|
+                           stimulus=="Alarm 2"| 
+                           stimulus=="Alarm 3"|
+                           stimulus=="Alarm 4", "Alarm", "Cry")  %>% 
+  mutate(
+    as_datetime(time)   
     ) 
 
 
@@ -91,13 +93,81 @@ dfmerged <- dfmerged %>%
    separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
 
 
+```
 
 
+```{r PREPROC_FUNCTION}
 
+
+demographics_df <- df %>% 
+  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
+  unique() %>% 
+  mutate(
+    response = position, 
+    position = NULL
+  ) 
+
+
+#Loading all files to a list
+list <- list.files(path = "./Data_sound", pattern = ".csv", all.files = FALSE, full.names = TRUE)
+
+
+preproc_function <- function(filename) {
+  
+  #load data
+  sounddf <- read_csv(file = filename)
+  
+    sounddf <- sounddf %>% 
+    group_by(stimulus)%>% 
+    mutate(
+      RT_new = sum(RT),
+      startms = time,
+      ) %>% 
+    filter(RT_new==RT) %>% 
+    filter(!(RT==0 & iteration!=4)) %>% 
+    arrange(startSequence) %>% 
+    ungroup()%>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    mutate(
+      stim_order = 1:8, 
+      RT_new = NULL,
+      end = NULL,
+      start = NULL,
+      dyad_name = id,
+      volume = NULL, 
+      id = NULL,
+      date = NULL,
+      response = ifelse(response=="Q", "Left", "Right"),
+      response = ifelse(RT=="0", "None", response),
+      RT_from_onset = ifelse(RT=="0","0", RT-startms),
+      stim_category = ifelse(stimulus=="Alarm 1"|
+                             stimulus=="Alarm 2"| 
+                             stimulus=="Alarm 3"|
+                             stimulus=="Alarm 4", "Alarm", "Cry"))  %>% 
+    mutate(
+      as_datetime(time)   
+      ) 
+  
+  #dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
+  
+  #dfmerged <- dfmerged %>% 
+    #separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
+  
+  return(sounddf)
+}
+
+
+try <- preproc_function("./Data_sound/v0(1).csv")
+
+df_new = list %>%
+    purrr::map_df(preproc_function)
 
 ```
 
-```{r BAYESIAN?}
+
+
+
+```{r BAYESIAN}
 
 get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
 
@@ -111,6 +181,55 @@ m1_prior <-
       
 
 ```
+
+
+
+```{r MDOELS FROM SIMULATION}
+
+################################ M2 #################################################  
+   
+get_prior(data = dfmerged, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:ID))
+
+m2_gaus_prior <-
+  brm(data = dfmerged,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender) + (1| gender:ID),
+      prior = c(prior(student_t(3, 11376, 7247), class = Intercept),
+                prior(normal(0, 99999), class = b),
+                prior(student_t(3, 0, 7247), class = sd),
+                prior(student_t(3, 0, 7247), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_gaus_prior, nsamples = 100)+
+  ggtitle("M2 Prior Predictive Check")
+
+#################
+
+#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
+#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
+m2_gaus <-
+  brm(data = dfmerged,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:ID),
+      prior=c(prior(student_t(3, 11376, 7247), class = Intercept),
+                prior(normal(0, 99999), class = b),
+                prior(student_t(3, 0, 7247), class = sd),
+                prior(student_t(3, 0, 7247), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m2_gaus, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+
+summary(m2_gaus)
+
+```
+
+
 
 
 
