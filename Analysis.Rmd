@@ -143,10 +143,9 @@ preproc_function <- function(filename) {
       stim_category = ifelse(stimulus=="Alarm 1"|
                              stimulus=="Alarm 2"| 
                              stimulus=="Alarm 3"|
-                             stimulus=="Alarm 4", "Alarm", "Cry"))  %>% 
-    mutate(
-      as_datetime(time)   
-      ) 
+                             stimulus=="Alarm 4", "Alarm", "Cry"), 
+     # time = as_datetime(time)
+    )
   
   #dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
   
