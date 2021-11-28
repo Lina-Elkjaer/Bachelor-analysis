@@ -327,6 +327,8 @@ summary(m1)
 RT_baseline_f <- rgamma(i/2, shape=5 ,scale=1000)
 RT_baseline_m <- rgamma(i/2, shape=6 ,scale=1000)
 
+?inverse.gaussian
+
 ?rgamma
 
 
@@ -366,9 +368,59 @@ data %>%
 
 ```
 
+```{r Iverse gaussian simulation}
+
+#DOES NOT WORK
+
+RT_baseline_f <- rinv_gaussian(i/2, mu=1 ,shape = 1)
+RT_baseline_m <- rinv_gaussian(i/2, mu=2,shape = 1)
+
+?inverse.gaussian
+
+?rgamma
 
 
-```{r Other method for simulation}
+RT_baseline_m %>% 
+    tibble() %>%
+    ggplot(aes(RT_baseline_m)) +
+    geom_density(color = "blue", size=2)
+
+RT_baseline_f %>% 
+    tibble() %>%
+    ggplot(aes(RT_baseline_f)) +
+    geom_density(color = "blue", size=2)
+
+
+
+data <- data  %>%
+    mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
+           RT = rnorm(800, mean=RT_baseline/100, sd=8), 
+           RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
+
+
+## quick look
+# Makes sense that with maximum entropy, overall mean is around .5
+# Answers in time
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+                aes(color=factor(gender)), size=2)
+
+
+
+
+
+
+```
+
+
+
+
+```{r rexgauss - Other method for simulation}
 
 #devtools::install_version("retimes","0.1-2")
 library(retimes)
@@ -509,6 +561,8 @@ pp_check(m2_gaus_prior, nsamples = 100)+
 
 #################
 
+#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
+#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m2_gaus <-
   brm(data = data,
       family = gaussian(),
@@ -829,8 +883,185 @@ m3_gaus <- add_criterion(m3, "loo")
 loo_compare(m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
   print(simplify = F)
 
+#Gaussian and exgaussian gives the same results...
 loo_compare(m_simple, m1, m2, m3, m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
   print(simplify = F)
 
+
+#m2 is best, next is m3, next is m1
+m2_gaus_student <- add_criterion(m2_gaus_student, "loo")
+m2 <- add_criterion(m2, "loo")
+
+
+
+#gaus_student is slightly better but we cannot know for sure (the error margine is larger than the difference )
+loo_compare(m2_gaus_student, m2, criterion = "loo") %>% 
+  print(simplify = F)
+
+
+
+
+```
+
+
+
+
+```{r THE LAST LINE}
+#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
+#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
+m2_gaus_last_line <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE,
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+
+
+#WITHOUT "LAST LINE" - 2013 divergent transitions. Rhat 1.12. Took about 60 sec.
+#WITH   "LAST LINE"  -Stopped it after 10 min
+m2_last_line <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 24.6), class = sd),
+                prior(gamma(1, 01), class = beta),
+                prior(student_t(3, 0, 24.6), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE,
+      control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+get_prior(data = data, family = inverse.gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+#WITHOUT "LAST LINE" - 4000 divergent transitions after warmup. Rhat 4.55. took 60 sec
+#WITH   "LAST LINE"  - Stopped it after 15 minutes (maybe try later?)
+m2_inverse <-
+  brm(data = data,
+      family = inverse.gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(normal(0, 1), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(gamma(0.01, 0.01), class = shape)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE,
+      control = list(adapt_delta = 0.999, max_treedepth = 15))
+
+
+```
+
+
+
+```{r STUDENT INTERCEPT}
+
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+#72 divergent transitions. Highest Rhat 1.02
+
+m2_gaus_student <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 609, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+summary(m2_gaus_student)
+
+pp_check(m2_gaus_student, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+
+# Divergent transitions 149. Rhat 1.07
+
+m2_gaus_student_flat <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 609, 233), class = Intercept),
+                prior(normal(0, 99999), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+####################################################################################################################
+
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+#1205 divergent transitions. Rhat 1.1 
+m2_student <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 609, 233), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 0.1), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+#1720 divergent transitions. Rhat 1.58
+m2_student_flat<-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 609, 233), class = Intercept),
+                prior(normal(0, 99999), class = b),
+                prior(student_t(3, 0, 233), class = sd),
+                prior(gamma(1, 0.1), class = beta),
+                prior(student_t(3, 0, 233), class= sigma)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+get_prior(data = data, family = inverse.gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+
+#######################################################################################################
+
+#4000 divergent transitions, Rhat 4.54
+m2_inverse_student <-
+  brm(data = data,
+      family = inverse.gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(gamma(0.01, 0.01), class = shape)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+# 4000 divergent transitions, Rhat 4.55
+m2_inverse_student_flat <-
+  brm(data = data,
+      family = inverse.gaussian(),
+      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
+                prior(normal(0, 99999), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(gamma(0.01, 0.01), class = shape)),
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
 ```
 
