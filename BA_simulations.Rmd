@@ -11,13 +11,17 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r Libraries}
 
+#install.packages("tidyverse", dependencies = TRUE)
+#install.packages("stringi")
 library(tidyverse)
-#install.packages("R2jags")
 library(R2jags)
 library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
+#install.packages("rstan")
+#install.packages("rstan", type = "source" )
+library(rstan)
 #install.packages("retimes")
 #library(retimes)
 set.seed(1997)
@@ -344,10 +348,10 @@ RT_baseline_f %>%
 
 
 
-data <- data  %>%
-    mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
-           RT = rnorm(800, mean=RT_baseline/100, sd=8), 
-           RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
+#data <- data  %>%
+    #mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8) ,
+           #RT = rnorm(800, mean=RT_baseline/100, sd=8), 
+           #RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
 
 
 ## quick look
@@ -392,23 +396,23 @@ RT_baseline_f %>%
 
 
 
-data <- data  %>%
-    mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
-           RT = rnorm(800, mean=RT_baseline/100, sd=8), 
-           RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
-
-
-## quick look
-# Makes sense that with maximum entropy, overall mean is around .5
-# Answers in time
-data %>%
-    group_by(id) %>%
-    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
-    # one line per id, colored per gender
-    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
-    # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)
+# data <- data  %>%
+#     mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
+#            RT = rnorm(800, mean=RT_baseline/100, sd=8), 
+#            RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
+# 
+# 
+# ## quick look
+# # Makes sense that with maximum entropy, overall mean is around .5
+# # Answers in time
+# data %>%
+#     group_by(id) %>%
+#     ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+#     # one line per id, colored per gender
+#     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+#     # Fat line for mean, one per gender
+#     geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+#                 aes(color=factor(gender)), size=2)
 
 
 
@@ -425,6 +429,7 @@ data %>%
 #devtools::install_version("retimes","0.1-2")
 library(retimes)
 
+
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
   rt_dist1_base <- rexgauss(50, mu=600, sigma=100, 200, positive = F)
@@ -436,11 +441,12 @@ library(retimes)
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
   
-  data <- data  %>%
-    mutate(rt_dist = ifelse(gender==0, 
+  data <- data  %>% 
+    mutate(rt_dist = ifelse(gender==0,
                             rep(rt_dist0_base, each = 8),
                             rep(rt_dist1_base, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=100))
+           RT = rnorm(800, mean=rt_dist, sd=100),
+           gender = as.factor(gender))
   
   
   data %>%
@@ -451,10 +457,45 @@ library(retimes)
     # Fat line for mean, one per gender
     geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
                 aes(color=factor(gender)), size=2)
+  
+  
+  
 
 ```
 
 
+```{r GAUSSIAN SIMULATION}
+?rnorm
+# Simulate a population of "good" reaction times:
+  # generate an ex-Gaussian population:
+  rt_dist1_base <- rnorm(50, mean=6000, sd=2000)
+  # keep positive values only:
+  rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
+
+  rt_dist0_base <- rnorm(50, mean=5000, sd=2000)
+  # keep positive values only:
+  rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
+  
+  
+  data <- data  %>%
+    mutate(rt_dist = ifelse(gender==0, 
+                            rep(rt_dist0_base, each = 8),
+                            rep(rt_dist1_base, each = 8)),
+           RT = rnorm(800, mean=rt_dist, sd=1000),
+           gender = as.factor(gender))
+  
+  
+  data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+                aes(color=factor(gender)), size=2)
+  
+  
+```
 
 
 
@@ -467,9 +508,9 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
   brm(data = data,
       family = gaussian(),
       RT ~ 1 + gender,
-      prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class= sigma)),
+      prior = c(prior(student_t(3, 650, 272), class = Intercept),
+                prior(normal(0, 100), class = b),
+                prior(student_t(3, 0, 272), class= sigma)),
       chains = 4,
       cores=2,
       sample_prior = "only",
@@ -486,7 +527,7 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
       family = gaussian(),
       RT ~ 1 + gender,
       prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
-                prior(normal(0, 1), class = b),
+                prior(normal(0, 100), class = b),
                 prior(student_t(3, 0, 233), class= sigma)),
       chains = 4,
       cores=2,
@@ -496,6 +537,8 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
  pp_check(m_gaus_simple, nsamples = 100)+
   #xlim(0,1000)+
   ggtitle("M_gaus_simple Posterior Predictive Check")
+ 
+ summary(m_gaus_simple)
 
 #################################### M1 ############################################
 
@@ -548,10 +591,10 @@ m2_gaus_prior <-
   brm(data = data,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender) + (1| gender:id),
-      prior = c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(student_t(3, 0, 233), class= sigma)),
+      prior =  c(prior(normal(0, 1), class = Intercept),
+               prior(normal(0, 1), class = b),
+               prior(student_t(3, 0, 2300), class = sd),
+              prior(student_t(3, 0, 2300), class= sigma)),
       cores=2,
       chains=4,
       sample_prior = "only")
@@ -565,17 +608,18 @@ pp_check(m2_gaus_prior, nsamples = 100)+
 #WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m2_gaus <-
   brm(data = data,
-      family = gaussian(),
+      family = gaussian,
       RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
+      prior=c(prior(student_t(3,618,218), class = Intercept),
                 prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(student_t(3, 0, 233), class= sigma)),
+                prior(student_t(3, 0, 272), class = sd),
+                prior(student_t(3, 0, 272), class= sigma)),
       cores = 2,
       chains = 4,
-      iter=3000,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
+      iter=2000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
 
 
 pp_check(m2_gaus, nsamples = 100)+
@@ -583,6 +627,10 @@ pp_check(m2_gaus, nsamples = 100)+
 summary(m2_gaus)
 
 ?brm
+
+
+
+
 
 ################################ M3 #################################################  
   
@@ -621,6 +669,95 @@ m3_gaus <-
 
 pp_check(m3_gaus, nsamples = 100)+
   ggtitle("M3 Posterior Predictive Check")
+
+
+
+################################ M4 #################################################  
+  
+   
+get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender:id))
+
+m4_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender:id),
+      prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
+               prior(normal(0, 1), class = b),
+               prior(student_t(3, 0, 272), class = sd),
+               prior(student_t(3, 0, 272), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m4_gaus_prior, nsamples = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
+#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
+m4_gaus <-
+  brm(data = data,
+      family = gaussian,
+      RT ~ 1 + gender + (1| gender:id),
+      prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 272), class = sd),
+                prior(student_t(3, 0, 272), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=4000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m4_gaus, nsamples = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m4_gaus)
+
+
+################################ M5 #################################################  
+  
+   
+get_prior(data = data, family = gaussian(), RT ~ 1 + (1| gender) + (1| gender:id))
+
+m5_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + (1| gender) + (1| gender:id),
+      prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
+               prior(student_t(3, 0, 272), class = sd),
+              prior(student_t(3, 0, 272), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m5_gaus_prior, nsamples = 100)+
+  ggtitle("M5 Prior Predictive Check")
+
+#################
+
+#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
+#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
+m5_gaus <-
+  brm(data = data,
+      family = gaussian(),
+      RT ~ 1 + (1| gender)+ (1| gender:id),
+      prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
+                prior(student_t(3, 0, 272), class = sd),
+                prior(student_t(3, 0, 272), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=4000,
+      sample_prior = TRUE,
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m2_gaus, nsamples = 100)+
+  ggtitle("M2 Posterior Predictive Check")
+summary(m2_gaus)
 
 ```
 
@@ -713,7 +850,7 @@ summary(m1)
 ################################ M2 #################################################  
   
    
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender  + (1| gender:id))#+ (1| gender)
 
 m2_prior <-
   brm(data = data,
@@ -733,15 +870,16 @@ pp_check(m2_prior, nsamples = 100)+
 
 #################
 
+
 m2 <-
   brm(data = data,
       family = exgaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 24.6), class = sd),
-                prior(gamma(1, 01), class = beta),
-                prior(student_t(3, 0, 24.6), class= sigma)),
+      RT ~ 1 + gender + (1| gender:id), #+ (1| gender),
+      prior=c(prior(student_t(3, 619, 218), class = Intercept),
+                prior(normal(1000, 1), class = b),
+                prior(student_t(3, 0, 218), class = sd),
+                prior(gamma(1, 0.1), class = beta),
+                prior(student_t(3, 0, 218), class= sigma)),
       cores = 2,
       chains = 4,
       sample_prior = TRUE)
@@ -878,10 +1016,10 @@ summary(m3_gaus)
 
 
 #m2 is best, next is m3, next is m1
-m_gaus_simple <- add_criterion(m_simple, "loo")
-m1_gaus <- add_criterion(m1, "loo")
-m2_gaus <- add_criterion(m2, "loo")
-m3_gaus <- add_criterion(m3, "loo")
+m_gaus_simple <- add_criterion(m_gaus_simple, "loo")
+m1_gaus <- add_criterion(m1_gaus, "loo")
+m2_gaus <- add_criterion(m2_gaus, "loo")
+m3_gaus <- add_criterion(m3_gaus, "loo")
 
 loo_compare(m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
   print(simplify = F)
@@ -892,17 +1030,20 @@ loo_compare(m_simple, m1, m2, m3, m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, crit
 
 
 #m2 is best, next is m3, next is m1
-m2_gaus_student <- add_criterion(m2_gaus_student, "loo")
+m2_gaus <- add_criterion(m2_gaus, "loo")
 m2 <- add_criterion(m2, "loo")
+m4_gaus <- add_criterion(m4_gaus, "loo")
 
 
 
 #gaus_student is slightly better but we cannot know for sure (the error margine is larger than the difference )
-loo_compare(m2_gaus_student, m2, criterion = "loo") %>% 
+loo_compare(m4_gaus, m2_gaus, criterion = "loo") %>% 
   print(simplify = F)
 
 
-
+summary(m2)
+summary(m2_gaus)
+summary(m4_gaus)
 
 ```
 

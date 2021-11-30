@@ -10,7 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Libraries}
-#Loading libraries
+install.packages("tidyverse")
+install.packages("ggplot2")
+install.packages("groupdata2")
+install.packages("janitor")
+install.packages("")
 library(tidyverse)
 library(ggplot2)
 #install.packages("groupdata2")
