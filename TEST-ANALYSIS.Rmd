@@ -207,7 +207,7 @@ preproc_function <- function(filename) {
 
 
 
-df <- preproc_function("all_apps_wide_2021-11-29.csv")
+df <- preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-29.csv")
 
 
 ```
@@ -238,6 +238,8 @@ demographics_df <- df %>%
 #list <- list.files(path = "./Data_sound", pattern = ".csv", all.files = FALSE, full.names = TRUE)
 
 
+sounddf<- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/MAIN/rt.csv")
+
 sound_preproc_function <- function(filename) {
   
   #load data
@@ -247,7 +249,7 @@ sound_preproc_function <- function(filename) {
     group_by(stimulus)%>% 
     mutate(
       RT_new = sum(RT),
-      startms = time,
+      startms = as.vector(time),
       ) %>% 
     filter(RT_new==RT) %>% 
     filter(!(RT==0 & iteration!=4)) %>% 
@@ -282,6 +284,58 @@ sound_preproc_function <- function(filename) {
 
 
 
-df_sound <- sound_preproc_function("LEFT/ht.csv")
+df_sound <- sound_preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/MAIN/rt.csv")
+
+
+```
+
+
+
+
+```{r}
+
+sounddf_old <-read_csv("Data_sound/v0(1).csv")
+
+
+sounddf <- sounddf %>% 
+    group_by(stimulus)%>% 
+    mutate(
+      RT_new = sum(RT),
+      startms = as.vector(time),
+      ) %>% 
+    filter(RT_new==RT) %>% 
+    filter(!(RT==0 & iteration!=4)) %>% 
+    arrange(startSequence) %>% 
+    ungroup()%>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    mutate(
+      stim_order = 1:8, 
+      RT_new = NULL,
+      end = NULL,
+      start = NULL,
+      dyad_name = id,
+      volume = NULL, 
+      id = NULL,
+      date = NULL,
+      response = ifelse(response=="Q", "Left", "Right"),
+      response = ifelse(RT=="0", "None", response),
+      RT_from_onset = ifelse(RT=="0","0", RT-startms),
+      stim_category = ifelse(stimulus=="Alarm 1"|
+                             stimulus=="Alarm 2"| 
+                             stimulus=="Alarm 3"|
+                             stimulus=="Alarm 4", "Alarm", "Cry")
+    )
+  
+  
+
+
+
+
+dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
+  
+  dfmerged <- dfmerged %>% 
+    separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
+
+
 ```
 
