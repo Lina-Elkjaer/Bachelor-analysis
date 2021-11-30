@@ -1,0 +1,287 @@
+---
+title: "TEst"
+author: "Lina Elkjær Pedersen"
+date: "11/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(groupdata2) 
+library(janitor)
+library(brms)
+library(lubridate)
+
+
+```
+
+
+
+```{r}
+read_csv("all_apps_wide_2021-11-29.csv")
+
+getwd()
+
+setwd("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data")
+
+
+```
+
+
+```{r Preprocfunction}
+
+#The function
+preproc_function <- function(filename) {
+  #load data
+  data1 <- read_csv(file = filename)
+    
+  #Removing empty columns
+  data2 <- data1 %>% remove_empty("cols") 
+  data2 <- filter(data2, participant._index_in_pages>2)
+  
+    #Splitting into task-specific df's
+  dfsurvey <- data1 %>% select(matches("survey"))
+
+  dfmatrix <- data1 %>% select(matches("matrix"))
+
+  dfprisoner <- data1 %>% select(matches("prison"))
+
+  dfpaticipant <- data1 %>% select(matches("participant"))
+
+  dfsession <- data1 %>% select(matches("session"))
+  
+  
+  
+  #################SURVEY#####################
+  
+  #Changing the long names 
+  names(dfsurvey) = gsub(pattern = "survey_followup.1.player.", replacement = "", x = names(dfsurvey))
+  
+  #Change from wide to long format, around the "q" aka the questions. Data in every other coloumn is repeated
+  dfsurvey <- pivot_longer(dfsurvey, cols= starts_with("q"))
+  
+  dfsurvey$id_in_group <- as.factor(dfsurvey$id_in_group)
+  
+  
+  #Creating GES_score
+  dfsurvey <- dfsurvey %>% 
+    #For some reason it only works when the below is done on its own...
+    #id_in_group <- as.factor(dfsurvey$id_in_group) %>% 
+    group_by(id_in_group) %>% 
+    subset(age !="NA") %>% 
+    rename(question = name) %>% 
+    mutate(
+      #Deleting columns
+      role = NULL,
+      payoff = NULL,
+      survey_followup.1.group.id_in_subsession = NULL,
+      survey_followup.1.subsession.round_number = NULL,
+      GES_score = sum(value/25),
+      round = gsub("[q]", "" , question, perl=TRUE),
+      round = as.numeric(round),
+      )
+  
+  
+  
+    #################PRISONER#####################
+  
+  #Deleting useless coloums 
+  dfprisoner <- subset(dfprisoner, select = !grepl("*group.id_in_subsession", names(dfprisoner)))
+  
+  #Firstly put everything in the same variable, then separate them. 
+  dfprisoner <- dfprisoner %>% 
+    mutate_all(as.character) %>% 
+    pivot_longer(cols = everything(), names_prefix = "prisoner.", names_to = "variables") %>% 
+    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
+    #deleting useless columns
+    subset(player=="player") %>%
+    #Splitting the variable-column in three
+    mutate(
+      id_in_group = ifelse(variable =="id_in_group", value, ""),
+      decision = ifelse(variable =="decision", value, ""),
+      payoff = ifelse(variable =="payoff", value, ""),
+      #Deleting columns
+      value = NULL,
+      variable= NULL,
+      player=NULL,
+      #Rearranging values, so the data is in the same rows
+      payoff=lead(payoff,2),
+      decision= lead(decision,3),
+      round = as.numeric(round)
+      ) %>%
+    #Deleting rows without data
+    filter(
+      decision!=""
+     )
+  
+  
+  #################MATRIX#####################
+
+  
+  #Firstly put everything in the same variable, then separate them.
+  dfmatrix <- dfmatrix %>%
+    mutate_all(as.character) %>%
+    pivot_longer(cols = everything(), names_prefix = "matrix_task.", names_to = "variables") %>%
+    separate(variables, into= c("round", "player", "variable"), sep="\\.") %>%
+    #deleting useless columns
+    subset(player=="player") %>%
+    subset(value !="NA") %>%
+    #Splitting the variable-column in three
+    mutate(
+      id_in_group = ifelse(variable =="id_in_group", value, ""),
+      matrix = ifelse(variable =="matrix", value, ""),
+      correct_answer = ifelse(variable =="correct_answer", value, ""),
+      answer = ifelse(variable =="answer1", value, ""),
+      completed = ifelse(variable =="completed1", value, ""),
+      success = ifelse(variable =="success1", value, ""),
+      time = ifelse(variable =="time1", value, ""),
+      payoff = ifelse(variable =="payoff", value, ""),
+
+      #Deleting columns
+      value = NULL,
+      variable= NULL,
+      player=NULL,
+      payoff=NULL,
+      #Rearranging values, so the data is in the same rows
+      matrix = lead(matrix,2),
+      correct_answer = lead(correct_answer,3),
+      answer=lead(answer,4),
+      completed=lead(completed,5),
+      success=lead(success,6),
+      time=lead(time,7),
+      ) %>%
+    #Deleting rows without data
+    filter(
+      id_in_group!="",
+      matrix!="[]")
+
+    dfmatrix$id_in_group <- as.factor(dfmatrix$id_in_group)
+    dfmatrix$success <- as.integer(dfmatrix$success)
+    dfmatrix$completed <- as.integer(dfmatrix$completed)
+
+    dfmatrix <- dfmatrix %>%
+      #For some reason it only works when the below is done on its own...
+      #id_in_group <- as.factor(dfmatrix$id_in_group) %>%
+      group_by(id_in_group) %>%
+      mutate(
+        total_success = sum(success),
+        total_completed = sum(completed), 
+        #Creates variable which contains the time spent on each matrix. 
+        #NB The last matrix is NA, however it will not be completed either. 
+        time1 = strptime(time, "%H:%M:%S"),
+        time_spent = lead(time1)-time1,
+        time1=NULL,
+        time_spent = gsub("[secs]", "" , time_spent, perl=TRUE), 
+        time_spent = as.numeric(time_spent),
+        payoff=NULL,
+        round = as.numeric(round)
+        )
+    
+    #Merging
+    dfmerged<- merge(dfsurvey, dfmatrix, by = c("id_in_group","round"), all = TRUE)
+    dfmerged1 <-  merge(dfmerged, dfprisoner, by = c("id_in_group","round"), all = TRUE)
+
+    dfmerged2 <- dfmerged1 %>% 
+      group_by(id_in_group) %>% 
+      mutate(
+        age = age[1],
+        gender = gender[1],
+        language = language [1], 
+        parent = parent[1],
+        experience = experience [1], 
+        regular_contact=regular_contact[1],
+        dyad_name = dyad_name[1],
+        position =position[1],
+        GES_score=GES_score[1],
+        )
+  
+      return(dfmerged2)
+}
+
+
+
+df <- preproc_function("all_apps_wide_2021-11-29.csv")
+
+
+```
+
+
+
+```{r}
+#Loading data 
+#df <- read_csv("DF_BA_test.csv")
+
+
+df <- df %>% 
+  mutate(
+    ID = paste(id_in_group, dyad_name),
+    gender = as.factor(gender)
+  )
+
+demographics_df <- df %>% 
+  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
+  unique() %>% 
+  mutate(
+    response = position, 
+    position = NULL
+  ) 
+
+
+#Loading all files to a list
+#list <- list.files(path = "./Data_sound", pattern = ".csv", all.files = FALSE, full.names = TRUE)
+
+
+sound_preproc_function <- function(filename) {
+  
+  #load data
+  sounddf <- read_csv(file = filename)
+  
+    sounddf <- sounddf %>% 
+    group_by(stimulus)%>% 
+    mutate(
+      RT_new = sum(RT),
+      startms = time,
+      ) %>% 
+    filter(RT_new==RT) %>% 
+    filter(!(RT==0 & iteration!=4)) %>% 
+    arrange(startSequence) %>% 
+    ungroup()%>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    mutate(
+      stim_order = 1:8, 
+      RT_new = NULL,
+      end = NULL,
+      start = NULL,
+      dyad_name = id,
+      volume = NULL, 
+      id = NULL,
+      date = NULL,
+      response = ifelse(response=="Q", "Left", "Right"),
+      response = ifelse(RT=="0", "None", response),
+      RT_from_onset = ifelse(RT=="0","0", RT-startms),
+      stim_category = ifelse(stimulus=="Alarm 1"|
+                             stimulus=="Alarm 2"| 
+                             stimulus=="Alarm 3"|
+                             stimulus=="Alarm 4", "Alarm", "Cry")
+    )
+  
+  dfmerged <- merge(demographics_df, sounddf, by = c("dyad_name","response"), all = TRUE)
+  
+  dfmerged <- dfmerged %>% 
+    separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
+  
+  return(dfmerged)
+}
+
+
+
+df_sound <- sound_preproc_function("LEFT/ht.csv")
+```
+
