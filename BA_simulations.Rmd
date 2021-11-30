@@ -10,7 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Libraries}
-
+#devtools::install_version("rstan","2.21.0")
+#packageVersion("rstan")
 #install.packages("tidyverse", dependencies = TRUE)
 #install.packages("stringi")
 library(tidyverse)
@@ -21,7 +22,7 @@ library(brms)
 library(ggplot2)
 #install.packages("rstan")
 #install.packages("rstan", type = "source" )
-library(rstan)
+library(cmdstanr)
 #install.packages("retimes")
 #library(retimes)
 set.seed(1997)
@@ -682,7 +683,7 @@ m4_gaus_prior <-
       family = gaussian(),
       RT ~ 1 + gender + (1| gender:id),
       prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
-               prior(normal(0, 1), class = b),
+               prior(normal(0, 1000), class = b),
                prior(student_t(3, 0, 272), class = sd),
                prior(student_t(3, 0, 272), class= sigma)),
       cores=2,
@@ -694,19 +695,17 @@ pp_check(m4_gaus_prior, nsamples = 100)+
 
 #################
 
-#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
-#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m4_gaus <-
   brm(data = data,
       family = gaussian,
       RT ~ 1 + gender + (1| gender:id),
       prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
-                prior(normal(0, 1000), class = b),
+                prior(normal(0, 10^6), class = b),
                 prior(student_t(3, 0, 272), class = sd),
                 prior(student_t(3, 0, 272), class= sigma)),
       cores = 2,
       chains = 4,
-      iter=4000,
+      iter=5000,
       sample_prior = TRUE
       #control = list(adapt_delta = 0.999, max_treedepth = 15)
       )
@@ -738,8 +737,6 @@ pp_check(m5_gaus_prior, nsamples = 100)+
 
 #################
 
-#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
-#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m5_gaus <-
   brm(data = data,
       family = gaussian(),
@@ -755,9 +752,9 @@ m5_gaus <-
       )
 
 
-pp_check(m2_gaus, nsamples = 100)+
-  ggtitle("M2 Posterior Predictive Check")
-summary(m2_gaus)
+pp_check(m5_gaus, nsamples = 100)+
+  ggtitle("M5 Posterior Predictive Check")
+summary(m5_gaus)
 
 ```
 
@@ -929,6 +926,51 @@ m3 <-
 
 pp_check(m3, nsamples = 100)+
   ggtitle("M3 Posterior Predictive Check")
+
+################################ M4 #################################################  
+  
+   
+get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender:id))
+
+m4_prior <-
+  brm(data = data,
+      family = exgaussian(),
+      RT ~ 1 + gender + (1| gender:id),
+      prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
+               prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 272), class = sd),
+               prior(student_t(3, 0, 272), class= sigma),
+               prior(gamma(1, 0.1), class = beta)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m4_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m4 <-
+  brm(data = data,
+      family = exgaussian,
+      RT ~ 1 + gender + (1| gender:id),
+      prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 272), class = sd),
+                prior(student_t(3, 0, 272), class= sigma),
+                prior(gamma(1, 0.1), class = beta)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE,
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m4, nsamples = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m4)
+
 
   
 ```

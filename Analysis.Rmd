@@ -10,11 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Libraries}
-install.packages("tidyverse")
-install.packages("ggplot2")
-install.packages("groupdata2")
-install.packages("janitor")
-install.packages("")
+#install.packages("tidyverse")
+#install.packages("ggplot2")
+#install.packages("groupdata2")
+#install.packages("janitor")
+#install.packages("")
 library(tidyverse)
 library(ggplot2)
 #install.packages("groupdata2")
@@ -119,15 +119,15 @@ timedf <- try %>%
 
 ```{r BAYESIAN}
 
-get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
-
-
-m1_prior <- 
-  brm(data=df,
-      family = binomial(),
-      response ~ 1 + gender:stim_category + (1|ID),
-      prior = c(prior(flat),)
-      
+# get_prior(data = dfmerged, family = binomial(), response ~ 1 + gender:stim_category + (1|ID))
+# 
+# 
+# m1_prior <- 
+#   brm(data=df,
+#       family = binomial(),
+#       response ~ 1 + gender:stim_category + (1|ID),
+#       prior = c(prior(flat))
+#       
       
 
 ```
@@ -174,7 +174,7 @@ sounddf <- sounddf %>%
     stim_category = ifelse(stimulus=="Alarm 1"|
                            stimulus=="Alarm 2"| 
                            stimulus=="Alarm 3"|
-                           stimulus=="Alarm 4", "Alarm", "Cry")  %>% 
+                           stimulus=="Alarm 4", "Alarm", "Cry"))  %>% 
   mutate(
     as_datetime(time)   
     ) 
@@ -250,6 +250,52 @@ pp_check(m2_gaus, nsamples = 100)+
   ggtitle("M2 Posterior Predictive Check")
 
 summary(m2_gaus)
+
+
+
+################################ M4 #################################################  
+   
+get_prior(data = df_new, family = gaussian(), RT ~ 1 + gender + (1| gender:ID))
+
+m4_gaus_prior <-
+  brm(data = df_new,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender:ID),
+      prior = c(prior(student_t(3, 11376, 7247), class = Intercept),
+                prior(normal(0, 100000), class = b),
+                prior(student_t(3, 0, 7247), class = sd),
+                prior(student_t(3, 0, 7247), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m4_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m4_gaus <-
+  brm(data = df_new,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender:ID),
+      prior=c(prior(student_t(3, 11376, 7247), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 7247), class = sd),
+                prior(student_t(3, 0, 7247), class= sigma)),
+      iter = 3000,
+      cores = 2,
+      chains = 4,
+      sample_prior = TRUE)
+
+
+pp_check(m4_gaus, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+
+summary(m4_gaus)
+
+
+
+
 
 ```
 
