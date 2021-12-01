@@ -207,7 +207,7 @@ preproc_function <- function(filename) {
 
 
 
-df <- preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-29.csv")
+df_all_wide <- preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-29.csv")
 
 
 ```
@@ -219,13 +219,13 @@ df <- preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/
 #df <- read_csv("DF_BA_test.csv")
 
 
-df <- df %>% 
+df_all_wide <- df_all_wide %>% 
   mutate(
     ID = paste(id_in_group, dyad_name),
     gender = as.factor(gender)
   )
 
-demographics_df <- df %>% 
+demographics_df <- df_all_wide %>% 
   select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID)) %>% 
   unique() %>% 
   mutate(
@@ -246,18 +246,24 @@ sound_preproc_function <- function(filename) {
   sounddf <- read_csv(file = filename)
   
     sounddf <- sounddf %>% 
+       mutate(volume = ifelse(volume==0,startSound/10,volume),
+         startSound= ifelse(startSound > 0 & startSound < 10, response, startSound),
+         response = ifelse(response == "Q" | response == "none"| response ==  "Keypad9", response, RT),
+         RT = ifelse(...11=="NA", RT, ...11),
+         ...11 = NULL) %>% 
     group_by(stimulus)%>% 
     mutate(
+      RT = as.numeric(RT),
       RT_new = sum(RT),
-      startms = as.vector(time),
+      startms = as.vector(startSound),
       ) %>% 
     filter(RT_new==RT) %>% 
-    filter(!(RT==0 & iteration!=4)) %>% 
+    filter(!(RT==0 & soundLevel!=4)) %>% 
     arrange(startSequence) %>% 
     ungroup()%>% 
     separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
     mutate(
-      stim_order = 1:8, 
+      #stim_order = 1:8, 
       RT_new = NULL,
       end = NULL,
       start = NULL,
@@ -279,7 +285,7 @@ sound_preproc_function <- function(filename) {
   dfmerged <- dfmerged %>% 
     separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ")
   
-  return(dfmerged)
+  return(sounddf)
 }
 
 
@@ -294,20 +300,34 @@ df_sound <- sound_preproc_function("/Users/linaelkjaerpedersen/Desktop/COBE-Expe
 
 ```{r}
 
-sounddf_old <-read_csv("Data_sound/v0(1).csv")
+#sounddf_old <-read_csv("Data_sound/v0(1).csv")
 
+sounddf<- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/MAIN/rt.csv")
 
 sounddf <- sounddf %>% 
-    group_by(stimulus)%>% 
+  mutate(volume = ifelse(volume==0,startSound/10,volume),
+         startSound= ifelse(startSound > 0 & startSound < 10, response, startSound),
+         response = ifelse(response == "Q" | response == "none"| response ==  "Keypad9", response, RT),
+         RT = ifelse(...11=="NA", RT, ...11),
+         ...11 = NULL
+    
+  )
+
+
+sounddf <- sounddf %>%
+    group_by(id, stimulus) %>% 
     mutate(
+      RT = gsub(",","", RT), 
+      RT = as.numeric(RT),
+      RT = ifelse(is.na(RT), 1, RT),
       RT_new = sum(RT),
-      startms = as.vector(time),
-      ) %>% 
-    filter(RT_new==RT) %>% 
-    filter(!(RT==0 & iteration!=4)) %>% 
+      startms = as.vector(startSound)
+      ) #%>% 
+    filter(RT_new==RT) #%>% 
+    filter(!(RT==1 & soundLevel!=4)) %>% 
     arrange(startSequence) %>% 
     ungroup()%>% 
-    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") #%>% 
     mutate(
       stim_order = 1:8, 
       RT_new = NULL,
