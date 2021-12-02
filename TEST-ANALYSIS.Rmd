@@ -323,8 +323,9 @@ sounddf <- sounddf %>%
       RT_new = sum(RT),
       startms = as.vector(startSound)
       ) #%>% 
+    filter(!(RT==0 & response=="none"))#%>% 
     filter(RT_new==RT) #%>% 
-    filter(!(RT==1 & soundLevel!=4)) %>% 
+    #filter(!(RT==0 & soundLevel!=4)) %>% 
     arrange(startSequence) %>% 
     ungroup()%>% 
     separate(col="startSequence", into = c("date", "time"), sep=" ") #%>% 
