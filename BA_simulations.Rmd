@@ -10,21 +10,17 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Libraries}
-#devtools::install_version("rstan","2.21.0")
-#packageVersion("rstan")
-#install.packages("tidyverse", dependencies = TRUE)
-#install.packages("stringi")
+
 library(tidyverse)
 library(R2jags)
 library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
-#install.packages("rstan")
-#install.packages("rstan", type = "source" )
 library(cmdstanr)
-#install.packages("retimes")
-#library(retimes)
+#devtools::install_version("retimes","0.1-2")
+library(retimes)
+
 set.seed(1997)
 
 ```
@@ -54,409 +50,34 @@ View(data)
 ```
 
 
-```{r RATE as outcome variable}
-#Creating a rate. Here the rate is equally likely to be any value between 0 and 1. 
-rate = runif(i, 0, 1)
-
-rate %>% # what does this look like? We got what we wanted. There is some variation, but if we had more datapoints it would be good. 
-    tibble() %>%
-    ggplot(aes(rate)) +
-    geom_density(color = "blue", size=2)
-
-mu = .6 #the mean
-kappa = 22 # kappa = the spread away from the mean. 
-
-alpha = (kappa - 1) * mu 
-beta = (kappa - 1) * (1 - mu)
-
-# Seeing what a distribution with mean 0.6 and kappa 22 looks like (NO DATA IS ADDED) #Looks good
-tibble(rate = rbeta(10000, alpha, beta)) %>%
-    ggplot(aes(rate)) +
-    geom_density(color = "blue", size=2) +
-    xlim(0, 1)
-
-# Let's write a function that reparametrise the beta distribution and draw samples
-#We do this because we want to add mu and kappa in the function instead of alpha and beta, but the function rbeta only takes the input alpha and beta. We therefore tells it what to do with our mu and kappa to calculate alpha and beta.
-mu_rbinom <- function(n, mu, kappa){
-    alpha = (kappa - 1) * mu
-    beta = (kappa - 1) * (1 - mu)
-
-    return(rbeta(n, alpha, beta))
-}
-
-# So now let's include Gender
-# We have 2 separate population (gender 0 and 1)
-# We can model them as having 2 different means but the same variation
-# (Although we could also assume different variance)
-mu_0 <- .5   #Mean of gender 0
-mu_1 <- .7   #Mean of gender 1
-kappa = 22   #Same spread 
-
-rates <- ifelse(rep(c(0,1), i/2) == 1, # recreate list of genders
-                    mu_rbinom(i, mu_1, kappa), # if gender = 1, use mu_1
-                    mu_rbinom(i, mu_0, kappa)) # if gender = 0, use mu_0
-
-
-# add to prexisting data, repeating each value 8 times (so each participant has the same rate for all 8 tries)
-data <- data  %>%
-    mutate(rate = rep(rates, each = 8))
-# plot to check
-data %>%
-    ggplot(aes(rate)) +
-        geom_density(aes(fill=factor(gender)), alpha = .6) +
-        geom_density(color = "red", size = 2) # super imposing the overall distribution
-
-# generate draws for each rate
-data <- data  %>%
-    mutate(answer = map2(1, rate, rbernoulli) %>%
-    unlist() %>% # output is a matrix, let's simplify it
-    as.numeric() # transform from TRUE/FALSE to 1/0
-    ) %>%
-    # recalculate sums
-    group_by(id) %>%
-    mutate( sum = cumsum(answer)) %>%
-    ungroup()
-
-
-#PLOTS
-# Rate of answers in time
-# We see that the mean of gender0 is smaller than the mean of gender 1. This is what we asked it to do so the simulations seem good.
-data %>%
-    group_by(id) %>%
-    ggplot(aes(trial,answer)) +
-    # This is a bit clearer to read than the line plot
-    geom_jitter(aes(color=factor(gender),group=id), width=.15, height=.15) +
-    # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), answer = mean(answer)),
-                aes(color=factor(gender)), size=2)
-# Cumsum
-data %>%
-    ggplot(aes(trial, jitter(sum, factor = .25), color=factor(gender))) +
-    geom_line(aes(group=id)) +
-    geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
-```
-
-
-```{r RT as outcome variable}
-
-#Creating a baseline reaction time. Here the response time is equally likely to be any value between 1000ms and 48048ms (the time when the sound is stopped). 
-#RT_baseline <- runif(i, 1000, 48048)         #but this is not distributed like reactiontimes...
-RT_baseline <- rgamma(i, shape=6 ,scale=1)   
-
-
-RT_baseline %>% # what does this look like? It looks okay. However this is probably not realistic, the responsetimes cannot get long enough. #Probably models response time after an increment in soundlevel.
-    tibble() %>%
-    ggplot(aes(RT_baseline)) +
-    geom_density(color = "blue", size=2)
-
-
-
-data <- data  %>%
-    mutate(RT_baseline = rep(RT_baseline, each = 8),
-           RT = rnorm(800, mean=RT_baseline, sd=1)) #NB I divided RT with 100 in order to make the sd have an effect
-          # RT = RT-mean(RT)) #For mean centering (gaussian purposes)
-
-
-## quick look
-# Makes sense that with maximum entropy, overall mean is around .5
-# Answers in time
-data %>%
-    group_by(id) %>%
-    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
-    # one line per id, colored per gender
-    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
-    # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)
-
-
-
-```
-
-
-```{r  GAUSSIAN}
-#Okay? With mean centered data
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-m1_prior_gaussian <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-     prior = c(prior(normal(0, 1), class = Intercept),
-               prior(normal(0, 1), class = b),
-               prior(exponential(1), class = sd),
-               prior(normal(1, 0.5), class = sigma)),
-      #prior = c(prior(student_t(3, 59.6, 26.7), class = Intercept),
-                #prior(normal(0, 1), class = b),
-               # prior(student_t(3, 0, 26.7), class = sd),
-                #prior(student_t(3, 0, 26.7), class = sigma)),
-     #prior=c(prior,
-             #prior(normal(0, 1), class = b)),
-      cores=2,
-      sample_prior = "only",
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-pp_check(m1_prior_gaussian, nsamples = 100)+
-  xlim(-20,20)+
-  ggtitle("Figure 1 - M1 Prior Predictive Check")
-
-#################
-
-m1_gaussian <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior,
-             prior(normal(0, 1), class = b)),
-      cores = 2,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-
-pp_check(m1_gaussian, nsamples = 100)+
-  xlim(-20,20)+
-  ggtitle("Figure 2 - M1 Posterior Predictive Check")
-summary(m1)
-```
-
-
-```{r GAMMA}
-#Does not work. Nothing in the prior and posterior plots.
-prior<- get_prior(data = data, family = Gamma(link = log), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-m1_prior <-
-  brm(data = data,
-      family = Gamma(link = log),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      #prior = c(prior(normal(0, 1), class = Intercept),
-                #prior(normal(0, 1), class = b),
-                #prior(exponential(1), class = sd)),
-      prior = c(prior(normal(80, 1), class = Intercept),
-                prior(unif(0, 1), class = b),
-                prior(exponential(1), class = sd),
-                prior(gamma(0.01), class = shape)),
-      #prior=c(prior, prior(unif(0, 1), class = b)),
-      cores=2,
-      sample_prior = "only",
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-pp_check(m1_prior, nsamples = 100)+
-  #xlim(0,200)+
-  ggtitle("Figure 1 - M1 Prior Predictive Check")
-
-#################
-
-m1 <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior,
-             prior(normal(0, 1), class = b)),
-      cores = 2,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-
-pp_check(m1, nsamples = 100)+
-  xlim(-20,20)+
-  ggtitle("Figure 2 - M1 Posterior Predictive Check")
-summary(m1)
-
-
-
-?prior()
-```
-
-```{r EX GAUSSIAN}
-
-
- get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-m1_prior <-
-  brm(data = data,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender) + (1| gender:id),
-      prior = c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 24.6), class = sd),
-                prior(gamma(1, 01), class = beta),
-                prior(student_t(3, 0, 24.6), class= sigma)),
-      #prior = c(prior(normal(80, 1), class = Intercept),
-                #prior(student_t(10, 0, 1), class = b),
-                #prior(exponential(1), class = sd),
-                #prior(gamma(0.01), class = shape)),
-     #prior=prior,
-      cores=2,
-      sample_prior = "only",
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-pp_check(m1_prior, nsamples = 100)+
-  #xlim(0,200)+
-  ggtitle("Figure 1 - M1 Prior Predictive Check")
-
-#################
-
-m1 <-
-  brm(data = data,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 24.6), class = sd),
-                prior(gamma(1, 01), class = beta),
-                prior(student_t(3, 0, 24.6), class= sigma)),
-      cores = 2,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-
-pp_check(m1, nsamples = 100)+
-  xlim(-20,200)+
-  ggtitle("Figure 2 - M1 Posterior Predictive Check")
-summary(m1)
-
-
-
-
-```
-
-
-
-
-
-
-
-
-```{r Trash simulation??}
-
-RT_baseline_f <- rgamma(i/2, shape=5 ,scale=1000)
-RT_baseline_m <- rgamma(i/2, shape=6 ,scale=1000)
-
-?inverse.gaussian
-
-?rgamma
-
-
-RT_baseline_m %>% 
-    tibble() %>%
-    ggplot(aes(RT_baseline_m)) +
-    geom_density(color = "blue", size=2)
-
-RT_baseline_f %>% 
-    tibble() %>%
-    ggplot(aes(RT_baseline_f)) +
-    geom_density(color = "blue", size=2)
-
-
-
-#data <- data  %>%
-    #mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8) ,
-           #RT = rnorm(800, mean=RT_baseline/100, sd=8), 
-           #RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
-
-
-## quick look
-# Makes sense that with maximum entropy, overall mean is around .5
-# Answers in time
-data %>%
-    group_by(id) %>%
-    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
-    # one line per id, colored per gender
-    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
-    # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)
-
-
-
-
-
-```
-
-```{r Iverse gaussian simulation}
-
-#DOES NOT WORK
-
-RT_baseline_f <- rinv_gaussian(i/2, mu=1 ,shape = 1)
-RT_baseline_m <- rinv_gaussian(i/2, mu=2,shape = 1)
-
-?inverse.gaussian
-
-?rgamma
-
-
-RT_baseline_m %>% 
-    tibble() %>%
-    ggplot(aes(RT_baseline_m)) +
-    geom_density(color = "blue", size=2)
-
-RT_baseline_f %>% 
-    tibble() %>%
-    ggplot(aes(RT_baseline_f)) +
-    geom_density(color = "blue", size=2)
-
-
-
-# data <- data  %>%
-#     mutate(RT_baseline = ifelse(gender=0, rep(RT_baseline, each = 8), ,
-#            RT = rnorm(800, mean=RT_baseline/100, sd=8), 
-#            RT = RT-mean(RT)) #NB I divided RT with 100 in order to make the sd have an effect
-# 
-# 
-# ## quick look
-# # Makes sense that with maximum entropy, overall mean is around .5
-# # Answers in time
-# data %>%
-#     group_by(id) %>%
-#     ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
-#     # one line per id, colored per gender
-#     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
-#     # Fat line for mean, one per gender
-#     geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
-#                 aes(color=factor(gender)), size=2)
-
-
-
-
-
-
-```
-
-
-
-
 ```{r rexgauss - Other method for simulation}
-
-#devtools::install_version("retimes","0.1-2")
-library(retimes)
-
 
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
-  rt_dist1_base <- rexgauss(50, mu=600, sigma=100, 200, positive = F)
+  rt_dist1_base_ex <- rexgauss(50, mu=600, sigma=100, 200, positive = F)
   # keep positive values only:
-  rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
+  rt_dist1_base_ex <- rt_dist1_base_ex[rt_dist1_base_ex > 0]
 
-  rt_dist0_base <- rexgauss(50, mu=300, sigma=100, 200, positive = F)
+  rt_dist0_base_ex <- rexgauss(50, mu=400, sigma=100, 200, positive = F)
   # keep positive values only:
-  rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
+  rt_dist0_base_ex <- rt_dist0_base_ex[rt_dist0_base_ex > 0]
   
   
-  data <- data  %>% 
+  data_ex <- data  %>% 
     mutate(rt_dist = ifelse(gender==0,
-                            rep(rt_dist0_base, each = 8),
-                            rep(rt_dist1_base, each = 8)),
+                            rep(rt_dist0_base_ex, each = 8),
+                            rep(rt_dist1_base_ex, each = 8)),
            RT = rnorm(800, mean=rt_dist, sd=100),
            gender = as.factor(gender))
   
   
-  data %>%
+  data_ex %>%
     group_by(id) %>%
     ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
     # one line per id, colored per gender
     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
     # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+    geom_line(data=summarise(group_by(data_ex, gender, trial), RT = mean(RT)),
                 aes(color=factor(gender)), size=2)
   
   
@@ -466,19 +87,20 @@ library(retimes)
 
 
 ```{r GAUSSIAN SIMULATION}
-?rnorm
-# Simulate a population of "good" reaction times:
-  # generate an ex-Gaussian population:
+# Simulation with different means for gender and individual differences by gender 
+
+  # generate a Gaussian population for gender=1:
   rt_dist1_base <- rnorm(50, mean=6000, sd=2000)
   # keep positive values only:
   rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
 
+  #for gender=0:
   rt_dist0_base <- rnorm(50, mean=5000, sd=2000)
   # keep positive values only:
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
-  
-  data <- data  %>%
+  #Generates individual response times based on the gender
+  data_gaus <- data  %>%
     mutate(rt_dist = ifelse(gender==0, 
                             rep(rt_dist0_base, each = 8),
                             rep(rt_dist1_base, each = 8)),
@@ -486,13 +108,13 @@ library(retimes)
            gender = as.factor(gender))
   
   
-  data %>%
+  data_gaus %>%
     group_by(id) %>%
     ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
     # one line per id, colored per gender
     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
     # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data, gender, trial), RT = mean(RT)),
+    geom_line(data=summarise(group_by(data_gaus, gender, trial), RT = mean(RT)),
                 aes(color=factor(gender)), size=2)
   
   
@@ -503,10 +125,10 @@ library(retimes)
 
 ```{r GAUSSIAN MODELS}
 
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender)
   
   m_gaus_simple_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender,
       prior = c(prior(student_t(3, 650, 272), class = Intercept),
@@ -524,7 +146,7 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
  
 ##################
   m_gaus_simple <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender,
       prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
@@ -543,11 +165,11 @@ get_prior(data = data, family = gaussian(), RT ~ 1 + gender)
 
 #################################### M1 ############################################
 
- get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| id))
+ get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender + (1| id))
  
  
 m1_gaus_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -567,7 +189,7 @@ pp_check(m1_gaus_prior, nsamples = 100)+
 
 
 m1_gaus <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -586,10 +208,10 @@ pp_check(m1_gaus, nsamples = 100)+
 ################################ M2 #################################################  
   
    
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
 
 m2_gaus_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender) + (1| gender:id),
       prior =  c(prior(normal(0, 1), class = Intercept),
@@ -608,7 +230,7 @@ pp_check(m2_gaus_prior, nsamples = 100)+
 #WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
 #WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m2_gaus <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian,
       RT ~ 1 + gender + (1| gender)+ (1| gender:id),
       prior=c(prior(student_t(3,618,218), class = Intercept),
@@ -636,10 +258,10 @@ summary(m2_gaus)
 ################################ M3 #################################################  
   
    
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
 
 m3_gaus_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender) + (1|id),
       prior = c(prior(normal(0, 1), class = Intercept),
@@ -656,7 +278,7 @@ pp_check(m3_gaus_prior, nsamples = 100)+
 #################
 
 m3_gaus <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender) + (1|id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -674,35 +296,38 @@ pp_check(m3_gaus, nsamples = 100)+
 
 
 ################################ M4 #################################################  
-  
+#M4 should be the one that best explains the data
+#Does detect difference between the two means of gender. But expects lower means for both:
+#gender0=5037,  gender1=5037-1378=3659      in reality gender0=6000, gender1=5000
+#Good at detecting sd and sigma 
    
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender:id))
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender + (1| gender:id))
 
 m4_gaus_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender:id),
-      prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
+      prior =  c(prior(student_t(3, 5504, 2375), class = Intercept),
                prior(normal(0, 1000), class = b),
-               prior(student_t(3, 0, 272), class = sd),
-               prior(student_t(3, 0, 272), class= sigma)),
+               prior(student_t(3, 0, 2375), class = sd),
+               prior(student_t(3, 0, 2375), class= sigma)),
       cores=2,
       chains=4,
       sample_prior = "only")
 
-pp_check(m4_gaus_prior, nsamples = 100)+
+pp_check(m4_gaus_prior, ndraws = 100)+
   ggtitle("M4 Prior Predictive Check")
 
 #################
 
 m4_gaus <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian,
       RT ~ 1 + gender + (1| gender:id),
-      prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
-                prior(normal(0, 10^6), class = b),
-                prior(student_t(3, 0, 272), class = sd),
-                prior(student_t(3, 0, 272), class= sigma)),
+      prior=c(prior(student_t(3, 5504, 2375), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2375), class = sd),
+                prior(student_t(3, 0, 2375), class= sigma)),
       cores = 2,
       chains = 4,
       iter=5000,
@@ -711,7 +336,7 @@ m4_gaus <-
       )
 
 
-pp_check(m4_gaus, nsamples = 100)+
+pp_check(m4_gaus, ndraws = 100)+
   ggtitle("M4 Posterior Predictive Check")
 summary(m4_gaus)
 
@@ -719,10 +344,10 @@ summary(m4_gaus)
 ################################ M5 #################################################  
   
    
-get_prior(data = data, family = gaussian(), RT ~ 1 + (1| gender) + (1| gender:id))
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + (1| gender) + (1| gender:id))
 
 m5_gaus_prior <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + (1| gender) + (1| gender:id),
       prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
@@ -738,9 +363,9 @@ pp_check(m5_gaus_prior, nsamples = 100)+
 #################
 
 m5_gaus <-
-  brm(data = data,
+  brm(data = data_gaus,
       family = gaussian(),
-      RT ~ 1 + (1| gender)+ (1| gender:id),
+      RT ~ 1 + (1| gender) + (1| gender:id),
       prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
                 prior(student_t(3, 0, 272), class = sd),
                 prior(student_t(3, 0, 272), class= sigma)),
@@ -764,10 +389,10 @@ summary(m5_gaus)
 
 
 ```{r EXGAUSSIAN MODELS}
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender)
+get_prior(data = data_ex, family = exgaussian(), RT ~ 1 + gender)
   
   m_simple_prior <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender,
       prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
@@ -786,7 +411,7 @@ get_prior(data = data, family = exgaussian(), RT ~ 1 + gender)
  
 ##################
    m_simple <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender,
       prior = c(prior(student_t(3, 609.1, 233), class = Intercept),
@@ -804,11 +429,11 @@ get_prior(data = data, family = exgaussian(), RT ~ 1 + gender)
 
 #################################### M1 ############################################
 
- get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| id))
+ get_prior(data = data_ex, family = exgaussian(), RT ~ 1 + gender + (1| id))
  
  
 m1_prior <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -828,7 +453,7 @@ summary(m1)
 
 
 m1 <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -847,10 +472,10 @@ summary(m1)
 ################################ M2 #################################################  
   
    
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender  + (1| gender:id))#+ (1| gender)
+get_prior(data = data_ex, family = exgaussian(), RT ~ 1 + gender  + (1| gender:id))#+ (1| gender)
 
 m2_prior <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender) + (1| gender:id),
       prior = c(prior(normal(0, 1), class = Intercept),
@@ -869,7 +494,7 @@ pp_check(m2_prior, nsamples = 100)+
 
 
 m2 <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id), #+ (1| gender),
       prior=c(prior(student_t(3, 619, 218), class = Intercept),
@@ -890,10 +515,10 @@ summary(m2)
 ################################ M3 #################################################  
   
    
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
+get_prior(data = data_ex, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1|id))
 
 m3_prior <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender) + (1|id),
       prior = c(prior(normal(0, 1), class = Intercept),
@@ -911,7 +536,7 @@ pp_check(m3_prior, nsamples = 100)+
 #################
 
 m3 <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender) + (1|id),
       prior=c(prior(normal(0, 1), class = Intercept),
@@ -930,17 +555,17 @@ pp_check(m3, nsamples = 100)+
 ################################ M4 #################################################  
   
    
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender:id))
+get_prior(data = data_ex, family = exgaussian(), RT ~ 1 + gender + (1| gender:id))
 
 m4_prior <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id),
-      prior =  c(prior(student_t(3, 647.5, 272), class = Intercept),
+      prior =  c(prior(student_t(3, 670, 218), class = Intercept),
                prior(normal(0, 1000), class = b),
-               prior(student_t(3, 0, 272), class = sd),
-               prior(student_t(3, 0, 272), class= sigma),
-               prior(gamma(1, 0.1), class = beta)),
+               prior(student_t(3, 0, 218), class = sd),
+               prior(student_t(3, 0, 218), class= sigma),
+               prior(gamma(1, 0.1), class = beta)), #dont know why this gives an error... It is what it suggests in get_prior...
       cores=2,
       chains=4,
       sample_prior = "only")
@@ -949,12 +574,12 @@ pp_check(m4_prior, ndraws = 100)+
   ggtitle("M4 Prior Predictive Check")
 
 #################
-
+#ESS is too low (even for 5000 iterations...)
 m4 <-
-  brm(data = data,
+  brm(data = data_ex,
       family = exgaussian,
       RT ~ 1 + gender + (1| gender:id),
-      prior=c(prior(student_t(3, 647.5, 272), class = Intercept),
+      prior=c(prior(student_t(3, 670, 272), class = Intercept),
                 prior(normal(0, 1000), class = b),
                 prior(student_t(3, 0, 272), class = sd),
                 prior(student_t(3, 0, 272), class= sigma),
@@ -963,7 +588,7 @@ m4 <-
       chains = 4,
       iter=5000,
       sample_prior = TRUE,
-      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      #control = list(adapt_delta = 0.999, max_treedepth = 15) #this line doesn't work after updating Stan.... "Fejl i unserialize(socklist[[n]]) : fejl under læsning fra forbindelse" 
       )
 
 
@@ -971,283 +596,23 @@ pp_check(m4, nsamples = 100)+
   ggtitle("M4 Posterior Predictive Check")
 summary(m4)
 
-
   
 ```
 
 
 
+```{r}
 
-
-
-```{r GAMMA MODELS}
-#Have to remove anything less than 0 in order to do family= gamma 
-
-data <- data  %>%
-    mutate(RT = ifelse(RT<0, 1, RT))
-
-#ERRORMESSAGES.... PRODUCED NA'S and does not produce a graph in the posterior check
-################################ M2 #################################################  
-  
-   
-get_prior(data = data, family = Gamma(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-m2_gamma_prior <-
-  brm(data = data,
-      family = Gamma(),
-      RT ~ 1 + gender + (1| gender) + (1| gender:id),
-      prior = c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(0.01, 0.01), class = shape)),
-      cores=2,
-      chains=4,
-      sample_prior = "only")
-
-pp_check(m2_gamma_prior, nsamples = 100)+
-  ggtitle("M2 Prior Predictive Check")
-
-#################
-
-m2_gamma <-
-  brm(data = data,
-      family = Gamma(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(1, 01), class = shape)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-
-pp_check(m2_gamma, nsamples = 100)+
-  ggtitle("M2 Posterior Predictive Check")
-summary(m2)
-```
-
-
-
-
-
-
-```{r MODEL COMPARISON}
-summary(m_simple)
-summary(m1)
-summary(m2)
-summary(m3)
-
-#m2 is best, next is m3, next is m1
-m_simple <- add_criterion(m_simple, "loo")
-m1 <- add_criterion(m1, "loo")
-m2 <- add_criterion(m2, "loo")
-m3 <- add_criterion(m3, "loo")
-
-
-loo_compare(m_simple,m1, m2, m3, criterion = "loo") %>% 
-  print(simplify = F)
-
-
-
-
-summary(m_gaus_simple)
-summary(m1_gaus)
-summary(m2_gaus)
-summary(m3_gaus)
-
-
-#m2 is best, next is m3, next is m1
-m_gaus_simple <- add_criterion(m_gaus_simple, "loo")
-m1_gaus <- add_criterion(m1_gaus, "loo")
-m2_gaus <- add_criterion(m2_gaus, "loo")
-m3_gaus <- add_criterion(m3_gaus, "loo")
-
-loo_compare(m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
-  print(simplify = F)
-
-#Gaussian and exgaussian gives the same results...
-loo_compare(m_simple, m1, m2, m3, m_gaus_simple, m1_gaus, m2_gaus, m3_gaus, criterion = "loo") %>% 
-  print(simplify = F)
-
-
-#m2 is best, next is m3, next is m1
-m2_gaus <- add_criterion(m2_gaus, "loo")
-m2 <- add_criterion(m2, "loo")
+#Uses different data now, so can't really be compared. 
+m4 <- add_criterion(m4, "loo")
 m4_gaus <- add_criterion(m4_gaus, "loo")
 
 
 
-#gaus_student is slightly better but we cannot know for sure (the error margine is larger than the difference )
-loo_compare(m4_gaus, m2_gaus, criterion = "loo") %>% 
+loo_compare( m4, m4_gaus, criterion = "loo") %>% 
   print(simplify = F)
 
 
-summary(m2)
-summary(m2_gaus)
-summary(m4_gaus)
-
 ```
 
-
-
-
-```{r THE LAST LINE}
-#WITHOUT "LAST LINE" - 29 divergent transitions. Rhat 1.02. Took 110 seconds
-#WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
-m2_gaus_last_line <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(student_t(3, 0, 233), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-
-#WITHOUT "LAST LINE" - 2013 divergent transitions. Rhat 1.12. Took about 60 sec.
-#WITH   "LAST LINE"  -Stopped it after 10 min
-m2_last_line <-
-  brm(data = data,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 24.6), class = sd),
-                prior(gamma(1, 01), class = beta),
-                prior(student_t(3, 0, 24.6), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15)
-      )
-
-
-get_prior(data = data, family = inverse.gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-#WITHOUT "LAST LINE" - 4000 divergent transitions after warmup. Rhat 4.55. took 60 sec
-#WITH   "LAST LINE"  - Stopped it after 15 minutes (maybe try later?)
-m2_inverse <-
-  brm(data = data,
-      family = inverse.gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(normal(0, 1), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(0.01, 0.01), class = shape)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE,
-      control = list(adapt_delta = 0.999, max_treedepth = 15))
-
-
-```
-
-
-
-```{r STUDENT INTERCEPT}
-
-get_prior(data = data, family = gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-#72 divergent transitions. Highest Rhat 1.02
-
-m2_gaus_student <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 609, 233), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(student_t(3, 0, 233), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-summary(m2_gaus_student)
-
-pp_check(m2_gaus_student, nsamples = 100)+
-  ggtitle("M2 Posterior Predictive Check")
-
-# Divergent transitions 149. Rhat 1.07
-
-m2_gaus_student_flat <-
-  brm(data = data,
-      family = gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 609, 233), class = Intercept),
-                prior(normal(0, 99999), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(student_t(3, 0, 233), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-
-####################################################################################################################
-
-get_prior(data = data, family = exgaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-#1205 divergent transitions. Rhat 1.1 
-m2_student <-
-  brm(data = data,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 609, 233), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(gamma(1, 0.1), class = beta),
-                prior(student_t(3, 0, 233), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-#1720 divergent transitions. Rhat 1.58
-m2_student_flat<-
-  brm(data = data,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 609, 233), class = Intercept),
-                prior(normal(0, 99999), class = b),
-                prior(student_t(3, 0, 233), class = sd),
-                prior(gamma(1, 0.1), class = beta),
-                prior(student_t(3, 0, 233), class= sigma)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-
-get_prior(data = data, family = inverse.gaussian(), RT ~ 1 + gender + (1| gender) + (1| gender:id))
-
-#######################################################################################################
-
-#4000 divergent transitions, Rhat 4.54
-m2_inverse_student <-
-  brm(data = data,
-      family = inverse.gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
-                prior(normal(0, 1), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(0.01, 0.01), class = shape)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-
-# 4000 divergent transitions, Rhat 4.55
-m2_inverse_student_flat <-
-  brm(data = data,
-      family = inverse.gaussian(),
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
-      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
-                prior(normal(0, 99999), class = b),
-                prior(student_t(3, 0, 2.5), class = sd),
-                prior(gamma(0.01, 0.01), class = shape)),
-      cores = 2,
-      chains = 4,
-      sample_prior = TRUE)
-```
 
