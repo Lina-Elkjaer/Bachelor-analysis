@@ -9,22 +9,54 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+```{r}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+data <- read_csv("dataweek1.csv")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+data <-  data %>% 
+  mutate(
+    ...1 = NULL,
+    ...2 = NULL
+  )
 
-```{r cars}
-summary(cars)
+get_prior(data = data_gaus, family = gaussian(), RT ~ 1 + gender + (1| gender:id))
+
+m4_gaus_prior <-
+  brm(data = data_gaus,
+      family = gaussian(),
+      RT ~ 1 + gender + (1| gender:id),
+      prior =  c(prior(student_t(3, 5504, 2375), class = Intercept),
+               prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2375), class = sd),
+               prior(student_t(3, 0, 2375), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m4_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m4_gaus <-
+  brm(data = data_gaus,
+      family = gaussian,
+      RT ~ 1 + gender + (1| gender:id),
+      prior=c(prior(student_t(3, 5504, 2375), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2375), class = sd),
+                prior(student_t(3, 0, 2375), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m4_gaus, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m4_gaus)
+
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

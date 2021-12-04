@@ -230,8 +230,10 @@ dfmerged <- merge(demographics_df, sounddf1, by = c("dyad_name"), all = TRUE)
   dfmerged <- dfmerged %>% 
     separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ") %>% 
     mutate(
-      position = response.x, 
-     response.x = NULL
+     position = response.x, 
+     response.x = NULL, 
+     response = response.y, 
+     response.y = NULL
     )
 
 rm(data1, data2, data_day01, data_day02, data_day03, data_day29, data_day29_2, data_day30, sounddf, dfsurvey, dfsurvey_day29, dfsurvey_full, demographics_df, sounddf1)
