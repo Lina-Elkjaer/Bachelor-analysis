@@ -1,5 +1,5 @@
 ---
-title: "Proprocessing 2"
+title: "Preprocessing 2"
 author: "Lina Elkjær Pedersen"
 date: "11/30/2021"
 output: html_document
