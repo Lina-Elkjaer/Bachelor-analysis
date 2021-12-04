@@ -41,7 +41,7 @@ n = 8
 # Baseline data doesn't contain the output variable yet
 id = rep(c(1:i), each=n) # creates i participants with each n rows
 trial = rep(c(1:n), i) # repeat 1 to n trials for i participants
-gender = rep(c(0,1), i/2, each=n) # repeat i/2 so that we get half female, half male
+gender = rep(c(0,1), i/g, each=n) # repeat i/2 so that we get half female, half male
 
 # And combine
 data <- tibble(id, gender, trial) %>%
@@ -615,4 +615,63 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
 
 ```
 
+
+
+
+
+
+
+
+```{r Including a stimulus factor}
+# Simulation with different means for gender and individual differences by gender and stimuli_types 
+
+  # generate a Gaussian population for gender=1:
+  rt_dist1_base <- rnorm(50, mean=6000, sd=500)
+  # keep positive values only:
+  rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
+
+  #for gender=0:
+  rt_dist0_base <- rnorm(50, mean=5000, sd=500)
+  # keep positive values only:
+  rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
+  
+  stim_female <- rbinom(50, size = 1, prob = 0.7)
+  stim_male <- rbinom(50, size = 1, prob = 0.3)
+  
+  
+  data <- tibble(id, gender, trial, stim) %>%
+    arrange(id, trial) %>% 
+    mutate(
+      gender = ifelse(gender ==1, "Male", "Female")
+    )
+  
+  #Generate likelyhood of answering each stim
+  stim_dist1_base <- rbinom(400, size = 1, prob = 0.4) #males
+  stim_dist0_base <- rbinom(400, size = 1, prob = 0.6) #females
+  
+  
+  #Generates individual response times based on the gender
+  data_gaus <- data  %>%
+    mutate(rt_dist = ifelse(gender=="Female", 
+                            rep(rt_dist0_base, each = 8),
+                            rep(rt_dist1_base, each = 8)),
+           RT = rnorm(800, mean=rt_dist, sd=1000),
+           stim = ifelse(gender=="Female", stim_dist0_base, stim_dist1_base),
+           gender = as.factor(gender),
+           stim = ifelse (stim==1, "Cry", "Alarm"))
+  
+
+  data_gaus %>%
+    group_by(id) %>%
+    ggplot(aes(trial,stim)) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_point(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data_gaus, gender, trial), stim = mean(stim)),
+                aes(color=factor(gender)), size=2)
+  
+  
+  
+  
+```
 
