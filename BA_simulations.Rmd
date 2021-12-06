@@ -21,6 +21,7 @@ library(cmdstanr)
 #devtools::install_version("retimes","0.1-2")
 library(retimes)
 
+
 set.seed(1997)
 
 ```
@@ -54,11 +55,11 @@ View(data)
 
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
-  rt_dist1_base_ex <- rexgauss(50, mu=600, sigma=100, 200, positive = F)
+  rt_dist1_base_ex <- rexgauss(50, mu=1680, sigma=100, 200, positive = F)  #NB Chose to use centiseconds instead of miliseconds because it is responsetimes, not reaction times. Means based of the run we did on ourselves.
   # keep positive values only:
   rt_dist1_base_ex <- rt_dist1_base_ex[rt_dist1_base_ex > 0]
 
-  rt_dist0_base_ex <- rexgauss(50, mu=400, sigma=100, 200, positive = F)
+  rt_dist0_base_ex <- rexgauss(50, mu=1020, sigma=100, 200, positive = F)
   # keep positive values only:
   rt_dist0_base_ex <- rt_dist0_base_ex[rt_dist0_base_ex > 0]
   
@@ -67,7 +68,8 @@ View(data)
     mutate(rt_dist = ifelse(gender==0,
                             rep(rt_dist0_base_ex, each = 8),
                             rep(rt_dist1_base_ex, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=100),
+           RT = rnorm(800, mean=rt_dist, sd=500),
+           RT = ifelse (RT<100, 100, RT),
            gender = as.factor(gender))
   
   
@@ -78,10 +80,22 @@ View(data)
     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
     # Fat line for mean, one per gender
     geom_line(data=summarise(group_by(data_ex, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)
-  
-  
-  
+                aes(color=factor(gender)), size=2)+
+    labs(x = "Trial number", y = "Response time")
+    #scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "lightseagreen"))
+   
+    
+    data_ex %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data_ex, gender, trial), RT = mean(RT)),
+                aes(color = factor(gender)), size=2)+
+    labs(title = "Ex-gaussian simulations", x = "Trial number", y = "Response time")+
+    scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "steelblue3")) 
+
 
 ```
 
@@ -90,12 +104,12 @@ View(data)
 # Simulation with different means for gender and individual differences by gender 
 
   # generate a Gaussian population for gender=1:
-  rt_dist1_base <- rnorm(50, mean=6000, sd=2000)
+  rt_dist1_base <- rnorm(50, mean=1608, sd=200)
   # keep positive values only:
   rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
 
   #for gender=0:
-  rt_dist0_base <- rnorm(50, mean=5000, sd=2000)
+  rt_dist0_base <- rnorm(50, mean=1020, sd=200)
   # keep positive values only:
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
@@ -104,7 +118,8 @@ View(data)
     mutate(rt_dist = ifelse(gender==0, 
                             rep(rt_dist0_base, each = 8),
                             rep(rt_dist1_base, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=1000),
+           RT = rnorm(800, mean=rt_dist, sd=500),
+           RT = ifelse (RT<100, 100, RT),    #keeping values artificially above 0, in order to avoid negative response times. Also changing all responsetimes below 1 sec to 1 sec. 
            gender = as.factor(gender))
   
   
@@ -115,7 +130,9 @@ View(data)
     geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
     # Fat line for mean, one per gender
     geom_line(data=summarise(group_by(data_gaus, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)
+                aes(color=factor(gender)), size=2)+
+        labs(title = "Gaussian simulations", x = "Trial number", y = "Response time")+
+    scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "steelblue3")) 
   
   
 ```
@@ -307,10 +324,10 @@ m4_gaus_prior <-
   brm(data = data_gaus,
       family = gaussian(),
       RT ~ 1 + gender + (1| gender:id),
-      prior =  c(prior(student_t(3, 5504, 2375), class = Intercept),
+      prior =  c(prior(student_t(3, 1363, 558), class = Intercept),
                prior(normal(0, 1000), class = b),
-               prior(student_t(3, 0, 2375), class = sd),
-               prior(student_t(3, 0, 2375), class= sigma)),
+               prior(student_t(3, 0, 558), class = sd),
+               prior(student_t(3, 0, 558), class= sigma)),
       cores=2,
       chains=4,
       sample_prior = "only")
@@ -324,10 +341,10 @@ m4_gaus <-
   brm(data = data_gaus,
       family = gaussian,
       RT ~ 1 + gender + (1| gender:id),
-      prior=c(prior(student_t(3, 5504, 2375), class = Intercept),
+      prior=c(prior(student_t(3, 1362, 558), class = Intercept),
                 prior(normal(0, 1000), class = b),
-                prior(student_t(3, 0, 2375), class = sd),
-                prior(student_t(3, 0, 2375), class= sigma)),
+                prior(student_t(3, 0, 558), class = sd),
+                prior(student_t(3, 0, 558), class= sigma)),
       cores = 2,
       chains = 4,
       iter=5000,
@@ -561,10 +578,10 @@ m4_prior <-
   brm(data = data_ex,
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id),
-      prior =  c(prior(student_t(3, 670, 218), class = Intercept),
+      prior =  c(prior(student_t(3, 1514, 657), class = Intercept),
                prior(normal(0, 1000), class = b),
-               prior(student_t(3, 0, 218), class = sd),
-               prior(student_t(3, 0, 218), class= sigma),
+               prior(student_t(3, 0, 657), class = sd),
+               prior(student_t(3, 0, 657), class= sigma),
                prior(gamma(1, 0.1), class = beta)), #dont know why this gives an error... It is what it suggests in get_prior...
       cores=2,
       chains=4,
@@ -579,10 +596,10 @@ m4 <-
   brm(data = data_ex,
       family = exgaussian,
       RT ~ 1 + gender + (1| gender:id),
-      prior=c(prior(student_t(3, 670, 272), class = Intercept),
+      prior=c(prior(student_t(3, 1514, 657), class = Intercept),
                 prior(normal(0, 1000), class = b),
-                prior(student_t(3, 0, 272), class = sd),
-                prior(student_t(3, 0, 272), class= sigma),
+                prior(student_t(3, 0, 657), class = sd),
+                prior(student_t(3, 0, 657), class= sigma),
                 prior(gamma(1, 0.1), class = beta)),
       cores = 2,
       chains = 4,
@@ -592,7 +609,7 @@ m4 <-
       )
 
 
-pp_check(m4, nsamples = 100)+
+pp_check(m4, ndraws = 100)+
   ggtitle("M4 Posterior Predictive Check")
 summary(m4)
 
