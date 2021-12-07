@@ -1,0 +1,113 @@
+---
+title: "BA_rate_simulations"
+author: "Lina Elkjær Pedersen"
+date: "12/7/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Libraries}
+library(tidyverse)
+library(R2jags)
+library(coda)
+library(boot)
+library(brms)
+library(ggplot2)
+library(cmdstanr)
+#devtools::install_version("retimes","0.1-2")
+library(retimes)
+
+
+set.seed(1997)
+```
+
+```{r Structure of data}
+## First, we set our data structure
+
+# We have i participants (here 100)
+i = 100
+# participants have different genders (2)
+g = 2
+# each participant conducts n trials (8)
+n = 8
+
+# Let's now create the baseline data and combine it in a df
+# Baseline data doesn't contain the output variable yet
+id = rep(c(1:i), each=n) # creates i participants with each n rows
+trial = rep(c(1:n), i) # repeat 1 to n trials for i participants
+gender = rep(c(0,1), i/g, each=n) # repeat i/2 so that we get half female, half male
+
+# And combine
+data <- tibble(id, gender, trial) %>%
+    arrange(id, trial)
+```
+
+
+```{r RATE as outcome variable}
+
+# So now let's include Gender
+# We have 2 separate population (gender 0 and 1)
+# We can model them as having 2 different means but the same variation
+# (Although we could also assume different variance)
+mu_0 <- .7   #Mean of gender 0
+mu_1 <- .5   #Mean of gender 1
+kappa = 22   #Same spread 
+
+
+# Let's write a function that reparametrise the beta distribution and draw samples
+#We do this because we want to add mu and kappa in the function instead of alpha and beta, but the function rbeta only takes the input alpha and beta. We therefore tells it what to do with our mu and kappa to calculate alpha and beta.
+mu_rbinom <- function(n, mu, kappa){
+    alpha = (kappa - 1) * mu
+    beta = (kappa - 1) * (1 - mu)
+
+    return(rbeta(n, alpha, beta))
+}
+
+
+
+rates <- ifelse(rep(c(0,1), i/2) == 1, # recreate list of genders
+                    mu_rbinom(i, mu_1, kappa), # if gender = 1, use mu_1
+                    mu_rbinom(i, mu_0, kappa)) # if gender = 0, use mu_0
+
+
+# add to prexisting data, repeating each value 8 times (so each participant has the same rate for all 8 tries)
+data <- data  %>%
+    mutate(rate = rep(rates, each = 8))
+# plot to check
+data %>%
+    ggplot(aes(rate)) +
+        geom_density(aes(fill=factor(gender)), alpha = .6) +
+        geom_density(color = "red", size = 2) # super imposing the overall distribution
+
+# generate draws for each rate
+data <- data  %>%
+    mutate(answer = map2(1, rate, rbernoulli) %>%
+    unlist() %>% # output is a matrix, let's simplify it
+    as.numeric() # transform from TRUE/FALSE to 1/0
+    ) %>%
+    # recalculate sums
+    group_by(id) %>%
+    mutate( sum = cumsum(answer)) %>%
+    ungroup()
+
+
+#PLOTS
+# Rate of answers in time
+# We see that the mean of gender0 is smaller than the mean of gender 1. This is what we asked it to do so the simulations seem good.
+data %>%
+    group_by(id) %>%
+    ggplot(aes(trial,answer)) +
+    # This is a bit clearer to read than the line plot
+    geom_jitter(aes(color=factor(gender),group=id), width=.15, height=.15) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data, gender, trial), answer = mean(answer)),
+                aes(color=factor(gender)), size=2)
+# Cumsum
+data %>%
+    ggplot(aes(trial, jitter(sum, factor = .25), color=factor(gender))) +
+    geom_line(aes(group=id)) +
+    geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
+```
