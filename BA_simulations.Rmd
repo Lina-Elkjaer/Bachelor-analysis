@@ -32,7 +32,7 @@ set.seed(1997)
 ## First, we set our data structure
 
 # We have i participants (here 100)
-i = 100
+i = 50
 # participants have different genders (2)
 g = 2
 # each participant conducts n trials (8)
@@ -47,7 +47,6 @@ gender = rep(c(0,1), i/g, each=n) # repeat i/2 so that we get half female, half 
 # And combine
 data <- tibble(id, gender, trial) %>%
     arrange(id, trial)
-View(data)
 ```
 
 
@@ -55,11 +54,11 @@ View(data)
 
 # Simulate a population of "good" reaction times:
   # generate an ex-Gaussian population:
-  rt_dist1_base_ex <- rexgauss(50, mu=1680, sigma=100, 200, positive = F)  #NB Chose to use centiseconds instead of miliseconds because it is responsetimes, not reaction times. Means based of the run we did on ourselves.
+  rt_dist1_base_ex <- rexgauss(i/2, mu=1200, sigma=100, 200, positive = F)  #NB Chose to use centiseconds instead of miliseconds because it is responsetimes, not reaction times. Means based of the run we did on ourselves.
   # keep positive values only:
   rt_dist1_base_ex <- rt_dist1_base_ex[rt_dist1_base_ex > 0]
 
-  rt_dist0_base_ex <- rexgauss(50, mu=1020, sigma=100, 200, positive = F)
+  rt_dist0_base_ex <- rexgauss(i/2, mu=1000, sigma=100, 200, positive = F)
   # keep positive values only:
   rt_dist0_base_ex <- rt_dist0_base_ex[rt_dist0_base_ex > 0]
   
@@ -68,22 +67,10 @@ View(data)
     mutate(rt_dist = ifelse(gender==0,
                             rep(rt_dist0_base_ex, each = 8),
                             rep(rt_dist1_base_ex, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=500),
+           RT = rnorm(i*8, mean=rt_dist, sd=500),
            RT = ifelse (RT<100, 100, RT),
            gender = as.factor(gender))
   
-  
-  data_ex %>%
-    group_by(id) %>%
-    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
-    # one line per id, colored per gender
-    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
-    # Fat line for mean, one per gender
-    geom_line(data=summarise(group_by(data_ex, gender, trial), RT = mean(RT)),
-                aes(color=factor(gender)), size=2)+
-    labs(x = "Trial number", y = "Response time")
-    #scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "lightseagreen"))
-   
     
     data_ex %>%
     group_by(id) %>%
@@ -104,12 +91,12 @@ View(data)
 # Simulation with different means for gender and individual differences by gender 
 
   # generate a Gaussian population for gender=1:
-  rt_dist1_base <- rnorm(50, mean=1608, sd=200)
+  rt_dist1_base <- rnorm(i/2, mean=1200, sd=200)
   # keep positive values only:
   rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
 
   #for gender=0:
-  rt_dist0_base <- rnorm(50, mean=1020, sd=200)
+  rt_dist0_base <- rnorm(i/2, mean=1000, sd=200)
   # keep positive values only:
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
@@ -118,7 +105,7 @@ View(data)
     mutate(rt_dist = ifelse(gender==0, 
                             rep(rt_dist0_base, each = 8),
                             rep(rt_dist1_base, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=500),
+           RT = rnorm(i*8, mean=rt_dist, sd=500),
            RT = ifelse (RT<100, 100, RT),    #keeping values artificially above 0, in order to avoid negative response times. Also changing all responsetimes below 1 sec to 1 sec. 
            gender = as.factor(gender))
   
@@ -136,6 +123,52 @@ View(data)
   
   
 ```
+
+
+```{r}
+m4_gaus <-
+  brm(data = data_gaus,
+      family = gaussian,
+      RT ~ 1 + gender + (1| gender:id),
+      prior=c(prior(student_t(3, 1362, 558), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 558), class = sd),
+                prior(student_t(3, 0, 558), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+summary(m4_gaus)
+```
+
+
+
+```{r}
+m4 <-
+  brm(data = data_ex,
+      family = exgaussian,
+      RT ~ 1 + gender + (1| gender:id),
+      prior=c(prior(student_t(3, 1514, 657), class = Intercept),
+                prior(normal(600, 1000), class = b),
+                prior(student_t(3, 0, 657), class = sd),
+                prior(student_t(3, 0, 657), class= sigma),
+                prior(gamma(1, 0.1), class = beta)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE,
+      #control = list(adapt_delta = 0.999, max_treedepth = 15) #this line doesn't work after updating Stan.... "Fejl i unserialize(socklist[[n]]) : fejl under læsning fra forbindelse" 
+      )
+
+summary(m4)
+
+
+```
+
+
 
 
 
@@ -579,7 +612,7 @@ m4_prior <-
       family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id),
       prior =  c(prior(student_t(3, 1514, 657), class = Intercept),
-               prior(normal(0, 1000), class = b),
+               prior(normal(6000, 1000), class = b),
                prior(student_t(3, 0, 657), class = sd),
                prior(student_t(3, 0, 657), class= sigma),
                prior(gamma(1, 0.1), class = beta)), #dont know why this gives an error... It is what it suggests in get_prior...
@@ -597,7 +630,7 @@ m4 <-
       family = exgaussian,
       RT ~ 1 + gender + (1| gender:id),
       prior=c(prior(student_t(3, 1514, 657), class = Intercept),
-                prior(normal(0, 1000), class = b),
+                prior(normal(600, 1000), class = b),
                 prior(student_t(3, 0, 657), class = sd),
                 prior(student_t(3, 0, 657), class= sigma),
                 prior(gamma(1, 0.1), class = beta)),
@@ -643,39 +676,36 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
 # Simulation with different means for gender and individual differences by gender and stimuli_types 
 
   # generate a Gaussian population for gender=1:
-  rt_dist1_base <- rnorm(50, mean=6000, sd=500)
+  rt_dist1_base <- rnorm(i/2, mean=1200, sd=200)
   # keep positive values only:
   rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
 
   #for gender=0:
-  rt_dist0_base <- rnorm(50, mean=5000, sd=500)
+  rt_dist0_base <- rnorm(i/2, mean=1000, sd=200)
   # keep positive values only:
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
-  stim_female <- rbinom(50, size = 1, prob = 0.7)
-  stim_male <- rbinom(50, size = 1, prob = 0.3)
   
-  
-  data <- tibble(id, gender, trial, stim) %>%
+  data <- tibble(id, gender, trial) %>%
     arrange(id, trial) %>% 
     mutate(
       gender = ifelse(gender ==1, "Male", "Female")
     )
   
   #Generate likelyhood of answering each stim
-  stim_dist1_base <- rbinom(400, size = 1, prob = 0.4) #males
-  stim_dist0_base <- rbinom(400, size = 1, prob = 0.6) #females
+  stim_dist1_base <- rbinom(i*8/2, size = 1, prob = 0.4) #males
+  stim_dist0_base <- rbinom(i*8/2, size = 1, prob = 0.6) #females
   
   
   #Generates individual response times based on the gender
   data_gaus <- data  %>%
-    mutate(rt_dist = ifelse(gender=="Female", 
-                            rep(rt_dist0_base, each = 8),
-                            rep(rt_dist1_base, each = 8)),
-           RT = rnorm(800, mean=rt_dist, sd=1000),
-           stim = ifelse(gender=="Female", stim_dist0_base, stim_dist1_base),
-           gender = as.factor(gender),
-           stim = ifelse (stim==1, "Cry", "Alarm"))
+    mutate(stim = ifelse(gender=="Female", stim_dist0_base, stim_dist1_base),
+           stim = ifelse (stim==1, "Cry", "Alarm"),
+          rt_dist = ifelse(stim == "Cry" & gender == "Female", rt_dist0_base, rt_dist1_base),
+           RT = rnorm(i*8, mean=rt_dist, sd=500),
+           RT = ifelse(RT<100, 100, RT),
+           
+           gender = as.factor(gender))
   
 
   data_gaus %>%
@@ -690,5 +720,112 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
   
   
   
+  data_gaus %>%
+    group_by(id) %>%
+    ggplot(aes(trial,jitter(RT, factor = .25))) + # a bit of jitter to avoid overplotting
+    # one line per id, colored per gender
+    geom_line(aes(color=factor(gender),group=id), position = position_dodge(.4)) +
+    # Fat line for mean, one per gender
+    geom_line(data=summarise(group_by(data_gaus, gender, trial), RT = mean(RT)),
+                aes(color = factor(gender)), size=2)
+    #labs(title = "Gaussian simulations", x = "Trial number", y = "Response time")+
+    #scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "steelblue3")) 
+  
+  
+```
+
+```{r}
+
+################################ M stim #################################################  
+
+   
+get_prior(data = data_gaus, family = gaussian(), RT ~ 0 + gender:stim + (1| gender:id))
+
+m_stim_gaus_prior <-
+  brm(data = data_gaus,
+      family = gaussian(),
+      RT ~ 0 + gender:stim + (1| gender:id),
+      prior =  c(prior(student_t(3, 1111, 539), class = Intercept),
+               prior(normal(600, 1000), class = b),
+               prior(student_t(3, 0, 539), class = sd),
+               prior(student_t(3, 0, 539), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m_stim_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m_stim_gaus <-
+  brm(data = data_gaus,
+      family = gaussian,
+      RT ~ 0 + gender:stim + (1| gender:id),
+      prior=c(#prior(student_t(3, 1111, 539), class = Intercept),
+                prior(normal(600, 1000), class = b),
+                prior(student_t(3, 0, 539), class = sd),
+                prior(student_t(3, 0, 539), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m_stim_gaus, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m_stim_gaus)
+
+
+
+```
+
+
+
+
+```{r}
+################################ M stim2 #################################################  
+#
+get_prior(data = data_gaus, family = gaussian(), RT ~ 0 + gender:stim + (1| id))
+
+m_stim_gaus_prior2 <-
+  brm(data = data_gaus,
+      family = gaussian(),
+      RT ~ 0 + gender:stim + (1| id),
+      prior =  c(prior(student_t(3, 1111, 539), class = Intercept),
+               prior(normal(600, 1000), class = b),
+               prior(student_t(3, 0, 539), class = sd),
+               prior(student_t(3, 0, 539), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m_stim_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m_stim_gaus <-
+  brm(data = data_gaus,
+      family = gaussian,
+      RT ~ 0 + gender:stim + (1| id),
+      prior=c(prior(student_t(3, 1111, 539), class = Intercept),
+                prior(normal(600, 1000), class = b),
+                prior(student_t(3, 0, 539), class = sd),
+                prior(student_t(3, 0, 539), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m_stim_gaus, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m_stim_gaus)
+
 ```
 
