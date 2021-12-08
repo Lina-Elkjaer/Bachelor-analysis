@@ -28,7 +28,7 @@ set.seed(1997)
 ## First, we set our data structure
 
 # We have i participants (here 100)
-i = 50
+i = 100
 # participants have different genders (2)
 g = 2
 # each participant conducts n trials (8)
@@ -46,6 +46,8 @@ data <- tibble(id, gender, trial) %>%
 ```
 
 
+
+#CAN'T MAKE MODEL WITHOUT STIM CONVERGE.... DEBATING JUST NOT USING IT....
 ```{r RATE as outcome variable}
 
 # So now let's include Gender
@@ -68,14 +70,15 @@ mu_rbinom <- function(n, mu, kappa){
 
 
 
-rates <- ifelse(rep(c(0,1), i/2) == 1, # recreate list of genders
-                    mu_rbinom(i, mu_1, kappa), # if gender = 1, use mu_1
-                    mu_rbinom(i, mu_0, kappa)) # if gender = 0, use mu_0
+#rates <- ifelse(rep(c(0,1), i/2) == 1, # recreate list of genders
+                    #mu_rbinom(i, mu_1, kappa), # if gender = 1, use mu_1
+                    #mu_rbinom(i, mu_0, kappa)) # if gender = 0, use mu_0
 
 
 # add to prexisting data, repeating each value 8 times (so each participant has the same rate for all 8 tries)
 data <- data  %>%
-    mutate(rate = rep(rates, each = 8))
+    mutate(rate = ifelse(gender == 0, rep(mu_rbinom(i, mu_0, kappa), each = 8), rep(mu_rbinom(i, mu_1, kappa), each = 8)) , 
+           gender = as.factor(gender))
 
 
 
@@ -114,6 +117,114 @@ data %>%
     geom_line(aes(group=id)) +
     geom_line(data=summarise(group_by(data, gender, trial), sum = mean(sum)), size=2)
 ```
+
+
+```{r}
+get_prior(data = data, family = gaussian(), rate ~ 1 + gender + (1| gender:id))
+
+
+
+m_rate_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1|gender:id),
+      prior =  c(prior(student_t(3, 0.5, 2.5), class = Intercept),
+                 prior(normal(0, 1000), class = b),
+                 prior(student_t(3, 0, 2.5), class = sd),
+                 prior(student_t(3, 0, 2.5), class = sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m_rate_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")+ 
+  xlim(0,1)
+
+
+
+m_rate_gaus <-
+  brm(data = data,
+      family = gaussian,
+      rate ~ 1 + gender + (1|gender:id),
+      prior=c(prior(student_t(3, 0.5, 2.5), class = Intercept),
+              prior(normal(0, 1), class = b),
+              prior(student_t(3, 0, 2.5), class = sd),
+              prior(student_t(3, 0, 2.5), class = sigma)),
+      cores = 2,
+      chains = 4,
+      iter=4000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m_rate_gaus, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")+ 
+  xlim(0,1)
+
+
+summary(m_rate_gaus)
+
+pairs(m_rate_gaus)
+
+rank(m_rate_gaus)
+
+?rank()
+```
+
+
+```{r}
+get_prior(data = data, family = gaussian(), rate ~ 1 + gender + (1|id))
+
+
+
+m_rate_gaus_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1|id),
+      prior =  c(prior(student_t(3, 0.5, 2.5), class = Intercept),
+                 prior(normal(0, 1000), class = b),
+                 prior(student_t(3, 0, 2.5), class = sd),
+                 prior(student_t(3, 0, 2.5), class = sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+#Dont understand why this looks so bad
+pp_check(m_rate_gaus_prior, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")+
+  xlim(0,1)
+
+
+
+m_rate_gaus <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1|id),
+      prior=c(prior(student_t(3, 0.5, 2.5), class = Intercept),
+              prior(normal(0, 1), class = b),
+              prior(student_t(3, 0, 2.5), class = sd),
+              prior(student_t(3, 0, 2.5), class = sigma)),
+      cores = 2,
+      chains = 4,
+      iter=4000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m_rate_gaus, ndraws = 100)+
+  ggtitle("M4 Prior Predictive Check")+ 
+  xlim(0,1)
+
+
+summary(m_rate_gaus)
+```
+
+
+
+
+
 
 
 ```{r INCLUDING STIMULUS}
