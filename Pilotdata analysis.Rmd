@@ -17,9 +17,9 @@ library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
-library(cmdstanr)
+#library(cmdstanr)
 
-packageVersion("rstan")
+#packageVersion("rstan")
 
 ```
 
@@ -168,7 +168,290 @@ pp_check(m5_gaus_RT_stim, ndraws = 100)+
   ggtitle("M4 Posterior Predictive Check")
 summary(m5_gaus_RT_stim)
 
+```
 
+
+
+
+NB: Do not understand the output..... It does not clarify which effect it is specific to. 
+```{r RT as outcome + stim and GES}
+
+get_prior(data = data_response, family = gaussian(), RT ~ 0 + gender:stim_category:GES_score + (1|ID))
+
+m1_GES_RT_prior <-
+  brm(data = data_response,
+      family = gaussian(),
+      RT~ 0 + gender:stim_category:GES_score + (1|ID),
+      prior =  c(prior(normal(4000, 1000), class = b),
+               prior(student_t(3, 0, 2709), class = sd),
+               prior(student_t(3, 0, 2709), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m1_GES_RT_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m1_GES_RT <-
+  brm(data = data_response,
+      family = gaussian,
+      RT ~ 0 + gender:stim_category:GES_score + (1| ID),
+      prior=c(prior(normal(4000, 1000), class = b),
+                prior(student_t(3, 0, 2709), class = sd),
+                prior(student_t(3, 0, 2709), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m1_GES_RT, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m1_GES_RT)
+
+
+
+
+################################### GES MODEL 2 ######################################
+
+
+get_prior(data = data_response, family = gaussian(), RT ~ 0 + gender:stim_category + GES_score + (1|ID))
+
+m2_GES_RT_prior <-
+  brm(data = data_response,
+      family = gaussian(),
+      RT~ 0 + gender:stim_category + GES_score + (1|ID),
+      prior =  c(prior(normal(4000, 1000), class = b),
+               prior(student_t(3, 0, 2709), class = sd),
+               prior(student_t(3, 0, 2709), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_GES_RT_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m2_GES_RT <-
+  brm(data = data_response,
+      family = gaussian,
+      RT ~ 0 + gender:stim_category + GES_score + (1| ID),
+      prior=c(prior(normal(4000, 1000), class = b),
+                prior(student_t(3, 0, 2709), class = sd),
+                prior(student_t(3, 0, 2709), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m2_GES_RT, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m2_GES_RT)
+
+```
+
+
+
+
+
+```{r CREATING A RATE OF ANSWERING PR PARTICIPANT}
+
+data <- data %>% 
+  group_by(ID) %>% 
+  mutate(
+    count_response = ifelse(position==response, 1, 0),
+    sum_response = sum(count_response),
+    rate = sum_response/8
+    
+  )
+
+```
+
+
+
+
+```{r RATE AS OUTCOME}
+
+
+get_prior(data = data, family = gaussian(), rate ~ 1 + gender + (1| gender:ID))
+
+m4_gaus_rate_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1| gender:ID),
+      prior =  c(prior(student_t(3, 0, 2.5), class = Intercept),
+               prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m4_gaus_rate_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m4_gaus_rate <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1| gender:ID),
+      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m4_gaus_rate, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m4_gaus_rate)
+
+################################################### m simple ################################################
+
+get_prior(data = data, family = gaussian(), rate ~ 1 + gender + (1|ID))
+
+m_simple_rate_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1|ID),
+      prior =  c(prior(student_t(3, 0, 2.5), class = Intercept),
+               prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m_simple_rate_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m_simple_rate <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 1 + gender + (1|ID),
+      prior=c(prior(student_t(3, 0, 2.5), class = Intercept),
+                prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m_simple_rate, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m_simple_rate)
+
+
+```
+
+
+
+```{r RATE AS OUTCOME + STIM}
+
+################################### M1 ########################################
+get_prior(data = data, family = gaussian(), rate ~ 0 + gender:stim_category + (1| gender:ID))
+
+m1_stim_gaus_rate_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category + (1| gender:ID),
+      prior =  c(prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m1_stim_gaus_rate_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m1_stim_gaus_rate <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category + (1| gender:ID),
+      prior=c(prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m1_stim_gaus_rate, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+summary(m1_stim_gaus_rate)
+
+
+
+################################### M2 ########################################
+get_prior(data = data, family = gaussian(), rate ~ 0 + gender:stim_category + (1| ID))
+
+m2_stim_gaus_rate_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category + (1| ID),
+      prior =  c(prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m2_stim_gaus_rate_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m2_stim_gaus_rate <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category + (1|ID),
+      prior=c(prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m2_stim_gaus_rate, ndraws = 100)+
+  ggtitle("M4 Posterior Predictive Check")
+
+summary(m2_stim_gaus_rate)
 
 
 
@@ -178,51 +461,47 @@ summary(m5_gaus_RT_stim)
 
 
 
-```{r EX-GAUSSIAN}
-################################ M4 #################################################  
-  
-   
-get_prior(data = data_response, family = exgaussian(), RT ~ 1 + gender + (1| gender:ID))
+```{r WITH GES}
+################################### M2 ########################################
 
-m4_prior <-
-  brm(data = data_response,
-      family = exgaussian(),
-      RT ~ 1 + gender + (1| gender:ID),
-      prior =  c(prior(student_t(3, 5787, 2709), class = Intercept),
-               prior(normal(0, 1000), class = b),
-               prior(student_t(3, 0, 2709), class = sd),
-               prior(student_t(3, 0, 2709), class= sigma),
-               prior(gamma(1, 0.1), class = beta)), #dont know why this gives an error... It is what it suggests in get_prior...
+get_prior(data = data, family = gaussian(), rate ~ 0 + gender:stim_category:GES_score + (1| gender:ID))
+
+m3_stim_gaus_rate_prior <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category:GES_score + (1| gender:ID),
+      prior =  c(prior(normal(0, 1000), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
       cores=2,
       chains=4,
       sample_prior = "only")
 
-pp_check(m4_prior, ndraws = 100)+
+pp_check(m3_stim_gaus_rate_prior, ndraws = 100)+
+  #xlim(-500,500)+
   ggtitle("M4 Prior Predictive Check")
 
 #################
-#ESS is too low (even for 5000 iterations...)
-m4 <-
-  brm(data = data_response,
-      family = exgaussian,
-      RT ~ 1 + gender + (1| gender:ID),
-      prior=c(prior(student_t(3, 5787, 2709), class = Intercept),
-                prior(normal(0, 1000), class = b),
-                prior(student_t(3, 0, 2709), class = sd),
-                prior(student_t(3, 0, 2709), class= sigma),
-                prior(gamma(1, 0.1), class = beta)),
+
+m3_stim_gaus_rate <-
+  brm(data = data,
+      family = gaussian(),
+      rate ~ 0 + gender:stim_category:GES_score + (1| gender:ID),
+      prior=c(prior(normal(0, 1000), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
       cores = 2,
       chains = 4,
-      iter=2000,
-      sample_prior = TRUE,
-      #control = list(adapt_delta = 0.999, max_treedepth = 15) #this line doesn't work after updating Stan.... "Fejl i unserialize(socklist[[n]]) : fejl under læsning fra forbindelse" 
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
       )
 
 
-pp_check(m4, nsamples = 100)+
+pp_check(m3_stim_gaus_rate, ndraws = 100)+
   ggtitle("M4 Posterior Predictive Check")
-summary(m4)
 
-  
+summary(m3_stim_gaus_rate)
+
 ```
 
