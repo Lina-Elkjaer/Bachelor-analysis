@@ -42,53 +42,6 @@ data_response <- subset(data, RT!="0")
 
 
 
-```{r RT_from_onset as outcome}
-get_prior(data = data_response, family = gaussian(), RT_from_onset ~ 1 + gender + (1| gender:ID))
-
-m4_gaus_prior <-
-  brm(data = data_response,
-      family = gaussian(),
-      RT_from_onset ~ 1 + gender + (1| gender:ID),
-      prior =  c(prior(student_t(3, 5099, 1181), class = Intercept),
-               prior(normal(4000, 1000), class = b),
-               prior(student_t(3, 0, 1181), class = sd),
-               prior(student_t(3, 0, 1181), class= sigma)),
-      cores=2,
-      chains=4,
-      sample_prior = "only")
-
-pp_check(m4_gaus_prior, ndraws = 100)+
-  #xlim(-500,500)+
-  ggtitle("M4 Prior Predictive Check")
-
-#################
-
-m4_gaus <-
-  brm(data = data_response,
-      family = gaussian,
-      RT_from_onset ~ 1 + gender + (1| gender:ID),
-      prior=c(prior(student_t(3, 5099, 1181), class = Intercept),
-                prior(normal(4000, 1000), class = b),
-                prior(student_t(3, 0, 1181), class = sd),
-                prior(student_t(3, 0, 1181), class= sigma)),
-      cores = 2,
-      chains = 4,
-      iter=5000,
-      sample_prior = TRUE
-      #control = list(adapt_delta = 0.999, max_treedepth = 15)
-      )
-
-
-pp_check(m4_gaus, ndraws = 100)+
-  ggtitle("M4 Posterior Predictive Check")
-summary(m4_gaus)
-
-
-pairs(m4_gaus)
-```
-
-
-
 ```{r RT as outcome}
 get_prior(data = data_response, family = gaussian(), RT ~ 1 + gender + (1| gender:ID))
 
@@ -135,8 +88,6 @@ summary(m4_gaus_RT)
 
 
 
-
-
 ```{r RT as outcome + stim}
 
 get_prior(data = data_response, family = gaussian(), RT ~ 0 + gender:stim_category + (1| ID))
@@ -179,14 +130,13 @@ summary(m4_gaus_RT_stim)
 
 ################################################################################################
 
-get_prior(data = data_response, family = gaussian(), RT ~ 1 + gender:stim_category + (1| ID))
+get_prior(data = data_response, family = gaussian(), RT ~ 0 + gender:stim_category + (1|gender + ID))
 
 m5_gaus_RT_stim_prior <-
   brm(data = data_response,
       family = gaussian(),
-      RT~ 1 + gender:stim_category + (1|ID),
-      prior =  c(prior(student_t(3, 5787, 2709), class = Intercept),
-               prior(normal(4000, 1000), class = b),
+      RT~ 0 + gender:stim_category + (1|gender + ID),
+      prior =  c(prior(normal(4000, 1000), class = b),
                prior(student_t(3, 0, 2709), class = sd),
                prior(student_t(3, 0, 2709), class= sigma)),
       cores=2,
@@ -202,9 +152,8 @@ pp_check(m5_gaus_RT_stim_prior, ndraws = 100)+
 m5_gaus_RT_stim <-
   brm(data = data_response,
       family = gaussian,
-      RT ~ 1 + gender + stim_category + (1|ID),
-      prior=c(prior(student_t(3, 5787, 2709), class = Intercept),
-                prior(normal(4000, 1000), class = b),
+      RT ~ 0 + gender:stim_category + (1|gender + ID),
+      prior=c(prior(normal(4000, 1000), class = b),
                 prior(student_t(3, 0, 2709), class = sd),
                 prior(student_t(3, 0, 2709), class= sigma)),
       cores = 2,
@@ -224,15 +173,6 @@ summary(m5_gaus_RT_stim)
 
 
 ```
-
-
-
-
-
-
-
-
-
 
 
 
