@@ -282,7 +282,7 @@ pp_check(m2_gaus_prior, nsamples = 100)+
 m2_gaus <-
   brm(data = data_gaus,
       family = gaussian,
-      RT ~ 1 + gender + (1| gender)+ (1| gender:id),
+      RT ~ 1 + gender + (1| gender) + (1| gender:id),
       prior=c(prior(student_t(3,618,218), class = Intercept),
                 prior(normal(0, 1), class = b),
                 prior(student_t(3, 0, 272), class = sd),

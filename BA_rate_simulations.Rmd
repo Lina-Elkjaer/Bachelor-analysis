@@ -16,7 +16,7 @@ library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
-library(cmdstanr)
+#library(cmdstanr)
 #devtools::install_version("retimes","0.1-2")
 library(retimes)
 
@@ -28,7 +28,7 @@ set.seed(1997)
 ## First, we set our data structure
 
 # We have i participants (here 100)
-i = 100
+i = 50
 # participants have different genders (2)
 g = 2
 # each participant conducts n trials (8)
@@ -118,8 +118,8 @@ data %>%
 
 ```{r INCLUDING STIMULUS}
 
-mu_0 <- .7   #Mean of gender 0
-mu_1 <- .5   #Mean of gender 1
+mu_0 <- .65   #Mean of gender 0
+mu_1 <- .60   #Mean of gender 1
 kappa = 22   #Same spread 
 
 
