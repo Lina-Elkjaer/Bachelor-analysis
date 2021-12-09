@@ -17,6 +17,7 @@ library(coda)
 library(boot)
 library(brms)
 library(ggplot2)
+library(bayesplot)
 #library(cmdstanr)
 
 #packageVersion("rstan")
@@ -38,6 +39,9 @@ data <-  data %>%
   )
 
 data_response <- subset(data, RT!="0")
+
+
+data_cry <- subset(data, stim_category=="Cries")
 ```
 
 
@@ -275,6 +279,12 @@ data <- data %>%
     
   )
 
+#Okay so I think the mean has to be something other than 0.... Maybe if I remove the data from all participants who never answered. 
+#TRY RATE MODELS WITH THIS DATA!!!!
+data_rate <- data %>% 
+  subset(sum_response!=0)
+  )
+
 ```
 
 
@@ -503,5 +513,54 @@ pp_check(m3_stim_gaus_rate, ndraws = 100)+
 
 summary(m3_stim_gaus_rate)
 
+```
+
+
+
+
+```{r DATA = data_cry}
+
+get_prior(data = data_cry, family = gaussian(), rate ~ 0 + gender:GES_score + (1| ID))
+
+m1_cry_prior <-
+  brm(data = data_cry,
+      family = gaussian(),
+      rate ~ 0 + gender:GES_score + (1|ID),
+      prior =  c(prior(normal(0.5, 0.5), class = b),
+               prior(student_t(3, 0, 2.5), class = sd),
+               prior(student_t(3, 0, 2.5), class= sigma)),
+      cores=2,
+      chains=4,
+      sample_prior = "only")
+
+pp_check(m1_cry_prior, ndraws = 100)+
+  #xlim(-500,500)+
+  ggtitle("M4 Prior Predictive Check")
+
+#################
+
+m1_cry_rate <-
+  brm(data = data_cry,
+      family = gaussian(),
+      rate ~ 0 + gender:GES_score + (1| ID),
+      prior=c(prior(normal(0.5, 1), class = b),
+                prior(student_t(3, 0, 2.5), class = sd),
+                prior(student_t(3, 0, 2.5), class= sigma)),
+      cores = 2,
+      chains = 4,
+      iter=5000,
+      sample_prior = TRUE
+      #control = list(adapt_delta = 0.999, max_treedepth = 15)
+      )
+
+
+pp_check(m1_cry_rate, ndraws = 100, type = "dens_overlay")+
+  ggtitle("M4 Posterior Predictive Check")
+
+summary(m1_cry_rate)
+
+pp_check(m1_cry_rate, ndraws= 100, group = "gender", type = "stat_grouped")
+
+?pp_check
 ```
 
