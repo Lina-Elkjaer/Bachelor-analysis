@@ -230,7 +230,7 @@ summary(m_rate_gaus)
 ```{r INCLUDING STIMULUS}
 
 mu_0 <- .65   #Mean of gender 0
-mu_1 <- .60   #Mean of gender 1
+mu_1 <- .6   #Mean of gender 1
 kappa = 22   #Same spread 
 
 
@@ -249,8 +249,10 @@ stim <- c("Cry", "Alarm")
 #Stim==1 is cry, gender == 0 means female
 data <- data  %>%
     mutate(stim = rep(c("Cry", "Alarm"), times=i*4),
-           gender = ifelse(gender == "0", "Female", "Male"),
-           rate = ifelse(stim == "Cry" & gender == "Female", rep(mu_rbinom(i, mu_0, kappa), each = 8), rep(mu_rbinom(i, mu_1, kappa), each = 8))           )
+           gender = as.factor(gender),
+           #gender = ifelse(gender == "0", "Female", "Male"),
+           rate = ifelse(stim == "Cry" & gender == "0", rep(mu_rbinom(i, mu_0, kappa), each = 8), rep(mu_rbinom(i, mu_1, kappa), each = 8)),
+           rate = ifelse(stim == "Cry" & gender == "1", rep(mu_rbinom(i, mu_1, kappa), each = 8), rate))
 
 
 
@@ -270,6 +272,15 @@ data <- data  %>%
     group_by(id) %>%
     mutate( sum = cumsum(answer)) %>%
     ungroup()
+
+
+#THE FIGURE I AM GOING TO USE??
+ggplot(data, aes(rate, fill = gender)) +
+  geom_density(alpha = .5)+
+  facet_wrap(.~ stim)+
+  labs(title="b")
+
+
 
 
 #PLOTS
