@@ -128,7 +128,7 @@ data <- tibble(id, gender, trial) %>%
 ```{r}
 m4_gaus <-
   brm(data = data_gaus,
-      family = gaussian,
+      family = gaussian(),
       RT ~ 1 + gender + (1| gender:id),
       prior=c(prior(student_t(3, 1362, 558), class = Intercept),
                 prior(normal(0, 1000), class = b),
@@ -149,7 +149,7 @@ summary(m4_gaus)
 ```{r}
 m4 <-
   brm(data = data_ex,
-      family = exgaussian,
+      family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id),
       prior=c(prior(student_t(3, 1514, 657), class = Intercept),
                 prior(normal(600, 1000), class = b),
@@ -281,7 +281,7 @@ pp_check(m2_gaus_prior, nsamples = 100)+
 #WITH   "LAST LINE"  -NO divergent transitions. (still says ESS too low) Rhat 1.02. Took 620 sec.
 m2_gaus <-
   brm(data = data_gaus,
-      family = gaussian,
+      family = gaussian(),
       RT ~ 1 + gender + (1| gender) + (1| gender:id),
       prior=c(prior(student_t(3,618,218), class = Intercept),
                 prior(normal(0, 1), class = b),
@@ -627,7 +627,7 @@ pp_check(m4_prior, ndraws = 100)+
 #ESS is too low (even for 5000 iterations...)
 m4 <-
   brm(data = data_ex,
-      family = exgaussian,
+      family = exgaussian(),
       RT ~ 1 + gender + (1| gender:id),
       prior=c(prior(student_t(3, 1514, 657), class = Intercept),
                 prior(normal(600, 1000), class = b),
@@ -760,7 +760,7 @@ pp_check(m_stim_gaus_prior, ndraws = 100)+
 
 m_stim_gaus <-
   brm(data = data_gaus,
-      family = gaussian,
+      family = gaussian(),
       RT ~ 0 + gender:stim + (1| gender:id),
       prior=c(#prior(student_t(3, 1111, 539), class = Intercept),
                 prior(normal(600, 1000), class = b),
@@ -809,7 +809,7 @@ pp_check(m_stim_gaus_prior, ndraws = 100)+
 
 m_stim_gaus <-
   brm(data = data_gaus,
-      family = gaussian,
+      family = gaussian(),
       RT ~ 0 + gender:stim + (1| id),
       prior=c(prior(student_t(3, 1111, 539), class = Intercept),
                 prior(normal(600, 1000), class = b),
