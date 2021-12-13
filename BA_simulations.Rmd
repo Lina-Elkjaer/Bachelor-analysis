@@ -32,7 +32,7 @@ set.seed(1997)
 ## First, we set our data structure
 
 # We have i participants (here 100)
-i = 50
+i = 100
 # participants have different genders (2)
 g = 2
 # each participant conducts n trials (8)
@@ -91,12 +91,12 @@ data <- tibble(id, gender, trial) %>%
 # Simulation with different means for gender and individual differences by gender 
 
   # generate a Gaussian population for gender=1:
-  rt_dist1_base <- rnorm(i/2, mean=1200, sd=200)
+  rt_dist1_base <- rnorm(i/2, mean=1680, sd=200)
   # keep positive values only:
   rt_dist1_base <- rt_dist1_base[rt_dist1_base > 0]
 
   #for gender=0:
-  rt_dist0_base <- rnorm(i/2, mean=1000, sd=200)
+  rt_dist0_base <- rnorm(i/2, mean=1020, sd=200)
   # keep positive values only:
   rt_dist0_base <- rt_dist0_base[rt_dist0_base > 0]
   
@@ -118,7 +118,7 @@ data <- tibble(id, gender, trial) %>%
     # Fat line for mean, one per gender
     geom_line(data=summarise(group_by(data_gaus, gender, trial), RT = mean(RT)),
                 aes(color=factor(gender)), size=2)+
-        labs(title = "Gaussian simulations", x = "Trial number", y = "Response time")+
+        labs(title = "A) Remote means", x = "Trial number", y = "Response time")+
     scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "steelblue3")) 
   
   

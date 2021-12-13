@@ -256,6 +256,20 @@ data <- data  %>%
 
 
 
+#THE FIGURE I AM GOING TO USE??
+ggplot(data, aes(rate, fill = gender)) +
+  geom_density(alpha = .5)+
+  facet_wrap(.~ stim)+
+  labs(title="B) Close means")
+
+
+
+
+
+
+
+
+
 # plot to check
 data %>%
     ggplot(aes(rate)) +
@@ -274,11 +288,7 @@ data <- data  %>%
     ungroup()
 
 
-#THE FIGURE I AM GOING TO USE??
-ggplot(data, aes(rate, fill = gender)) +
-  geom_density(alpha = .5)+
-  facet_wrap(.~ stim)+
-  labs(title="b")
+
 
 
 
