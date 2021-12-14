@@ -107,9 +107,9 @@ m4_gaus_RT_stim_prior <-
       chains=4,
       sample_prior = "only")
 
-pp_check(m4_gaus_RT_prior, ndraws = 100)+
+pp_check(m4_gaus_RT_stim_prior, ndraws = 100)+
   #xlim(-500,500)+
-  ggtitle("M4 Prior Predictive Check")
+  ggtitle("Response time model - Prior predictive check")
 
 #################
 
@@ -129,7 +129,7 @@ m4_gaus_RT_stim <-
 
 
 pp_check(m4_gaus_RT_stim, ndraws = 100)+
-  ggtitle("M4 Posterior Predictive Check")
+  ggtitle("Response time model - Posterior predictive check")
 summary(m4_gaus_RT_stim)
 
 ################################################################################################
@@ -430,16 +430,16 @@ m2_stim_gaus_rate_prior <-
   brm(data = data,
       family = gaussian(),
       rate ~ 0 + gender:stim_category + (1| ID),
-      prior =  c(prior(normal(0, 1000), class = b),
+      prior =  c(prior(normal(0.5, 0.5), class = b),
                prior(student_t(3, 0, 2.5), class = sd),
                prior(student_t(3, 0, 2.5), class= sigma)),
       cores=2,
       chains=4,
       sample_prior = "only")
 
-pp_check(m2_stim_gaus_rate_prior, ndraws = 100)+
-  #xlim(-500,500)+
-  ggtitle("M4 Prior Predictive Check")
+pp_check(m2_stim_gaus_rate_prior, ndraws = 100, type = "stat")+
+  xlim(0,1)+
+  ggtitle("Response rate model - Prior predictive check")
 
 #################
 
@@ -447,7 +447,7 @@ m2_stim_gaus_rate <-
   brm(data = data,
       family = gaussian(),
       rate ~ 0 + gender:stim_category + (1|ID),
-      prior=c(prior(normal(0, 1000), class = b),
+      prior=c(prior(normal(0.5, 1), class = b),
                 prior(student_t(3, 0, 2.5), class = sd),
                 prior(student_t(3, 0, 2.5), class= sigma)),
       cores = 2,
@@ -458,8 +458,8 @@ m2_stim_gaus_rate <-
       )
 
 
-pp_check(m2_stim_gaus_rate, ndraws = 100)+
-  ggtitle("M4 Posterior Predictive Check")
+pp_check(m2_stim_gaus_rate, ndraws = 100, type = "stat")+
+  ggtitle("Response rate model - Posterior predictive check")
 
 summary(m2_stim_gaus_rate)
 
@@ -562,5 +562,58 @@ summary(m1_cry_rate)
 pp_check(m1_cry_rate, ndraws= 100, group = "gender", type = "stat_grouped")
 
 ?pp_check
+```
+
+
+
+
+
+```{r}
+
+color_scheme_set("red")
+
+post <- posterior_samples()
+
+post <- post %>% 
+    rename(c( "Estimate: female, alarm" = "b_genderFemale:stim_categoryAlarm",
+              "Estimate: male, alarm" = "b_genderMale:stim_categoryAlarm",
+              "Estimate: female, cry" = "b_genderFemale:stim_categoryCries",
+              "Estimate: male, cry" = "b_genderMale:stim_categoryCries"))
+  )
+
+post %>% 
+  select(starts_with("Estimate")) %>% 
+  mcmc_intervals(prob = .95,
+                 point_est = "mean") +
+  labs(title = "Response time in ms") +
+  theme_bw() +
+  theme(axis.text.y = element_text(hjust = 0),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank())
+
+
+
+
+
+
+color_scheme_set("red")
+
+post_rate <- posterior_samples(m2_stim_gaus_rate)
+
+post_rate <- post_rate %>% 
+    rename(c( "Estimate: female, alarm" = "b_genderFemale:stim_categoryAlarm",
+              "Estimate: male, alarm" = "b_genderMale:stim_categoryAlarm",
+              "Estimate: female, cry" = "b_genderFemale:stim_categoryCries",
+              "Estimate: male, cry" = "b_genderMale:stim_categoryCries"))
+
+post_rate %>% 
+  select(starts_with("Estimate")) %>% 
+  mcmc_intervals(prob = .95,
+                 point_est = "mean") +
+  labs(title = "Response rate") +
+  theme_bw() +
+  theme(axis.text.y = element_text(hjust = 0),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank())
 ```
 

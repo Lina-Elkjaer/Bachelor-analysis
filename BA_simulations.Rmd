@@ -129,7 +129,7 @@ data <- tibble(id, gender, trial) %>%
 m4_gaus <-
   brm(data = data_gaus,
       family = gaussian(),
-      RT ~ 1 + gender + (1| gender:id),
+      RT ~ 1 + gender + (1|gender:id),
       prior=c(prior(student_t(3, 1362, 558), class = Intercept),
                 prior(normal(0, 1000), class = b),
                 prior(student_t(3, 0, 558), class = sd),
@@ -689,7 +689,7 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
   data <- tibble(id, gender, trial) %>%
     arrange(id, trial) %>% 
     mutate(
-      gender = ifelse(gender ==1, "Male", "Female")
+      #gender = ifelse(gender ==1, "Male", "Female")
     )
   
   #Generate likelyhood of answering each stim
@@ -699,9 +699,9 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
   
   #Generates individual response times based on the gender
   data_gaus <- data  %>%
-    mutate(stim = ifelse(gender=="Female", stim_dist0_base, stim_dist1_base),
+    mutate(stim = ifelse(gender=="0", stim_dist0_base, stim_dist1_base),
            stim = ifelse (stim==1, "Cry", "Alarm"),
-          rt_dist = ifelse(stim == "Cry" & gender == "Female", rt_dist0_base, rt_dist1_base),
+          rt_dist = ifelse(stim == "Cry" & gender == "0", rt_dist0_base, rt_dist1_base),
            RT = rnorm(i*8, mean=rt_dist, sd=500),
            RT = ifelse(RT<100, 100, RT),
            
@@ -731,6 +731,14 @@ loo_compare( m4, m4_gaus, criterion = "loo") %>%
     #labs(title = "Gaussian simulations", x = "Trial number", y = "Response time")+
     #scale_color_manual(name="Gender", breaks=c("0", "1"), values = c("lightcoral", "steelblue3")) 
   
+  
+  
+  #THE FIGURE I AM GOING TO USE??
+ggplot(data_gaus, aes(RT, fill = gender)) +
+  geom_density(alpha = .5)+
+  facet_wrap(.~ stim)+
+  labs(title="A) Remote means")
+
   
 ```
 
@@ -811,10 +819,9 @@ m_stim_gaus <-
   brm(data = data_gaus,
       family = gaussian(),
       RT ~ 0 + gender:stim + (1| id),
-      prior=c(prior(student_t(3, 1111, 539), class = Intercept),
-                prior(normal(600, 1000), class = b),
-                prior(student_t(3, 0, 539), class = sd),
-                prior(student_t(3, 0, 539), class= sigma)),
+      prior=c(prior(normal(600, 1000), class = b),
+                prior(student_t(3, 0, 649), class = sd),
+                prior(student_t(3, 0, 649), class= sigma)),
       cores = 2,
       chains = 4,
       iter=5000,
