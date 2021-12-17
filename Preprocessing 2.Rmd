@@ -36,11 +36,22 @@ LOADING ALL FILES SEPERATELY AND BINDING THEM
 
 ```{r}
 #load data
-  data_day29 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-29.csv")
-  data_day30 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-30.csv")
-  data_day01 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-01.csv")
-  data_day02 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-02.csv")
-  data_day03 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-03.csv")
+ # data_day29 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-29.csv")
+  #data_day30 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-11-30.csv")
+  #data_day01 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-01.csv")
+  #data_day02 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-02.csv")
+  #data_day03 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-03.csv")
+  
+  
+  
+  #load data
+  data_day30 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-06.csv")
+  data_day01 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-07.csv")
+  data_day02 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-08.csv")
+  data_day03 <- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/all_apps_wide_2021-12-09.csv")
+  
+  data_day10 <- read_csv("/Users/linaelkjaerpedersen/Desktop/Bachelor/data for anja/otree.csv")
+
   
   #Leaving out day 29 because it is a different length
   data1 <- rbind(data_day30, data_day01, data_day02, data_day03)
@@ -105,7 +116,6 @@ DOING THE EXACT SAME, BUT FOR 29/11, FOR SOME REASON THIS DATA WAS LONGER
 
 ```{r DAY29}
 
-
 data_day29_2 <- data_day29 %>% remove_empty("cols") 
 data_day29_2 <- filter(data_day29_2, participant._index_in_pages>2) # Because 2 first matrices are testruns 
   
@@ -157,7 +167,7 @@ dfsurvey_day29 <- data_day29_2 %>% select(matches("survey"))
       )
 
   #After the same cleaning process, the day29 looks like the others. I bind them together.
-
+  
   dfsurvey_full <- rbind(dfsurvey,dfsurvey_day29)
   
 # Creating demographics df based on the full survey df
@@ -168,6 +178,26 @@ demographics_df <- dfsurvey_full %>%
     response = position, 
     position = NULL
   )
+
+
+# Creating demographics df based on the full survey df
+demographics_df1 <- dfsurvey_day29 %>% 
+  select(c(dyad_name, gender, GES_score, age, language, parent, experience, regular_contact, position, ID, id_in_group)) %>%
+  unique() %>% 
+  mutate(
+    response = position, 
+    position = NULL
+  )
+
+
+demographics_df1 <- demographics_df1 %>% 
+  filter(dyad_name== "SUPPLE RED PIG")
+
+demographics_df <-  rbind(demographics_df, demographics_df1)
+
+
+mean <- mean(demographics_df$age)
+sd <- sd(demographics_df$age)
 
 ```
 
@@ -180,6 +210,8 @@ demographics_df <- dfsurvey_full %>%
 
 sounddf<- read_csv("/Users/linaelkjaerpedersen/Desktop/COBE-Experiment-sync/data/MAIN/rt.csv")
 
+#sounddf<- read_csv("/Users/linaelkjaerpedersen/Desktop/Bachelor/data for anja/sound.csv")
+
 sounddf <- sounddf %>% 
   mutate(response = ifelse(response == "Q" | response == "none"| response ==  "Keypad9", response, startSound),
          startSound = ifelse(startSound == "Q" | startSound == "none"| startSound == "Keypad9", volum2 , startSound),
@@ -188,7 +220,21 @@ sounddf <- sounddf %>%
          volum2 = NULL)
     
 
-#NB: Sometimes RT is NA, even though response=Q....
+# 
+# 
+# sounddf2 <- sounddf %>% 
+#     separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+#   filter(date=="06-12-2021" | date == "07-12-2021" | date == "08-12-2021"| date == "09-12-2021"| date == "10-12-2021") %>% 
+#   group_by(id, stimulus) %>% 
+#     mutate( 
+#       RT = as.numeric(RT),
+#       RT = ifelse(is.na(RT), 1, RT),
+#       RT_new = sum(RT)
+#       ) 
+# 
+# dfresponse <- sounddf2 %>% 
+#   filter(response!="none")
+
 
 
 sounddf1 <- sounddf %>%
@@ -201,7 +247,7 @@ sounddf1 <- sounddf %>%
     filter(RT_new==RT & RT_new != 0) %>% 
     arrange(startSequence) %>% 
     ungroup()%>% 
-    separate(col="startSequence", into = c("date", "time"), sep=" ") %>% 
+    separate(col="startSequence", into = c("date", "time"), sep=" ") #%>% 
     mutate(
       #stim_order = 1:8, #does not work since one dyad only has 7.... Because the sound iterations were two close together
       RT = ifelse(RT==1, 0, RT),
@@ -209,7 +255,7 @@ sounddf1 <- sounddf %>%
       end = NULL,
       start = NULL,
       volume = NULL, 
-      date = NULL,
+      #date = NULL,
       dyad_name = id,
       id = NULL,
       response = ifelse(response=="Q", "Right", response),
@@ -225,7 +271,7 @@ sounddf1 <- sounddf %>%
   
 
 
-dfmerged <- merge(demographics_df, sounddf1, by = c("dyad_name"), all = TRUE)
+dfmerged <- merge(demographics_df1, sounddf1, by = c("dyad_name"), all = TRUE)
   
   dfmerged <- dfmerged %>% 
     separate(col="stimulus", into = c("stim_category", "stim_number"), sep=" ") %>% 
@@ -239,11 +285,19 @@ dfmerged <- merge(demographics_df, sounddf1, by = c("dyad_name"), all = TRUE)
 rm(data1, data2, data_day01, data_day02, data_day03, data_day29, data_day29_2, data_day30, sounddf, dfsurvey, dfsurvey_day29, dfsurvey_full, demographics_df, sounddf1)
   
   
+#dfmerged <- dfmerged %>% 
+  #filter(!is.na(gender))
+
+
 #Saving data
+
 #write.csv(dfmerged,'dataweek1.csv') 
+dfmerged_dates <- dfmerged %>% 
+  filter(date=="06-12-2021" | date == "07-12-2021" | date == "08-12-2021"| date == "09-12-2021"| date == "10-12-2021")
+
 
 #Just checking to see how many participants (27, after week one)  
-#unique <- as.data.frame(unique(dfmerged$ID))
+unique <- as.data.frame(unique(dfmerged$ID))
 
 #Just checking how many responses we have (51/207)
 #df_response <- subset(dfmerged, response.y!="none")
